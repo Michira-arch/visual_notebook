@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shipper: The Deliverable-Focused Manager (Neumorphic)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* --- Neumorphic Scrollbar --- */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--color-bg); }
+        ::-webkit-scrollbar-thumb { background: var(--color-scrollbar-thumb); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+        
+        @keyframes slideIn { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+        /* --- Theme Colors --- */
+        body {
+            /* Default to light theme - Updated to softer, lighter style */
+            --color-bg: #EBF0F5;
+            --color-text-base: #374151;
+            --color-text-muted: #6B7280;
+            --color-text-heading: #1F2937;
+            --color-shadow-dark: #D1D9E6;
+            --color-shadow-light: #FFFFFF;
+            --color-scrollbar-thumb: #D1D5DB;
+
+            --color-text-accent: #3D8BFD; /* Softer blue */
+            --color-text-accent-hover: #2a7aF0;
+            --color-text-accent-green: #059669;
+            --color-text-accent-red: #DC2626; /* red-600 */
+            --color-text-accent-purple: #9333EA; /* purple-600 */
+            --color-text-accent-yellow: #D97706;
+
+            --color-bg-accent: #3D8BFD; /* Softer blue */
+            --color-bg-progress-track: #D1D5DB;
+
+            --color-chart-text: #374151;
+            --color-chart-grid: #D1D5DB;
+        }
+
+        body.theme-dark {
+            /* Updated dark theme for softer shadows */
+            --color-bg: #2B3038;
+            --color-text-base: #D1D5DB;
+            --color-text-muted: #9CA3AF;
+            --color-text-heading: #F9FAFB;
+            --color-shadow-dark: #212529;
+            --color-shadow-light: #353B43;
+            --color-scrollbar-thumb: #4B5563;
+
+            --color-text-accent: #60A5FA; /* blue-400 */
+            --color-text-accent-hover: #93C5FD; /* blue-300 */
+            --color-text-accent-green: #34D399; /* green-400 */
+            --color-text-accent-red: #F87171; /* red-400 */
+            --color-text-accent-purple: #C084FC; /* purple-400 */
+            --color-text-accent-yellow: #FBBF24; /* yellow-400 */
+
+            --color-bg-accent: #60A5FA; /* blue-400 */
+            --color-bg-progress-track: #4B5563;
+
+            --color-chart-text: #D1D5DB;
+            --color-chart-grid: #4B5563;
+        }
+
+        /* Base body styles */
+        body {
+            background-color: var(--color-bg);
+            color: var(--color-text-base);
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+        }
+        
+        /* --- Neumorphic CSS Classes --- */
+        .neum-card {
+            background: var(--color-bg);
+            box-shadow: 5px 5px 10px var(--color-shadow-dark), -5px -5px 10px var(--color-shadow-light);
+            transition: all 0.2s ease-in-out;
+        }
+        .neum-inset {
+            background: var(--color-bg);
+            box-shadow: inset 5px 5px 10px var(--color-shadow-dark), inset -5px -5px 10px var(--color-shadow-light);
+            transition: all 0.2s ease-in-out;
+        }
+        .neum-button {
+            background: var(--color-bg);
+            box-shadow: 4px 4px 8px var(--color-shadow-dark), -4px -4px 8px var(--color-shadow-light);
+            transition: all 0.15s ease-in-out;
+            color: var(--color-text-muted);
+        }
+        .neum-button:active, .neum-button-active {
+            box-shadow: inset 4px 4px 8px var(--color-shadow-dark), inset -4px -4px 8px var(--color-shadow-light);
+            color: var(--color-text-accent);
+        }
+        .neum-icon-button {
+            width: 2.5rem; /* 40px */
+            height: 2.5rem; /* 40px */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: var(--color-bg);
+            box-shadow: 4px 4px 8px var(--color-shadow-dark), -4px -4px 8px var(--color-shadow-light);
+            transition: all 0.15s ease-in-out;
+            color: var(--color-text-muted);
+        }
+        .neum-icon-button:active, .neum-icon-button-active {
+            box-shadow: inset 4px 4px 8px var(--color-shadow-dark), inset -4px -4px 8px var(--color-shadow-light);
+            color: var(--color-text-accent);
+        }
+
+        .neum-circle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            border-radius: 50%;
+            background: var(--color-bg);
+            box-shadow: 6px 6px 12px var(--color-shadow-dark), -6px -6px 12px var(--color-shadow-light);
+            transition: all 0.2s ease-in-out;
+        }
+        .neum-circle:active {
+            box-shadow: inset 6px 6px 12px var(--color-shadow-dark), inset -6px -6px 12px var(--color-shadow-light);
+        }
+ 
+        /* --- Custom Text Color Classes --- */
+        .text-skin-base { color: var(--color-text-base); }
+        .text-skin-muted { color: var(--color-text-muted); }
+        .text-skin-heading { color: var(--color-text-heading); }
+        .text-skin-accent { color: var(--color-text-accent); }
+        .text-skin-accent-green { color: var(--color-text-accent-green); }
+        .text-skin-accent-red { color: var(--color-text-accent-red); }
+        .text-skin-accent-purple { color: var(--color-text-accent-purple); }
+        .text-skin-accent-yellow { color: var(--color-text-accent-yellow); }
+        .hover\:text-skin-accent-hover:hover { color: var(--color-text-accent-hover); }
+
+        .bg-skin-accent { background-color: var(--color-bg-accent); }
+        .bg-skin-progress-track { background-color: var(--color-bg-progress-track); }
+
+        .border-skin-accent-green { border-color: var(--color-text-accent-green); }
+        .border-skin-accent-blue { border-color: var(--color-text-accent); }
+        .border-skin-accent-yellow { border-color: var(--color-text-accent-yellow); }
+        .border-skin-accent-red { border-color: var(--color-text-accent-red); }
+        .border-skin-divider { border-color: var(--color-shadow-dark); }
+        
+        /* Custom range input */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 8px;
+            background: var(--color-bg);
+            box-shadow: inset 2px 2px 4px var(--color-shadow-dark), inset -2px -2px 4px var(--color-shadow-light);
+            border-radius: 4px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--color-bg-accent);
+            cursor: pointer;
+            box-shadow: 3px 3px 6px var(--color-shadow-dark), -3px -3px 6px var(--color-shadow-light);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--color-bg-accent);
+            cursor: pointer;
+            border: none;
+            box-shadow: 3px 3px 6px var(--color-shadow-dark), -3px -3px 6px var(--color-shadow-light);
+        }
+
+        /* --- Custom Form Input Styling (to match image) --- */
+        .neum-form-inset {
+            background: var(--color-bg);
+            box-shadow: inset 4px 4px 8px var(--color-shadow-dark), inset -4px -4px 8px var(--color-shadow-light);
+            border: none;
+            outline: none;
+            border-radius: 0.5rem; /* 8px */
+            padding: 0.5rem 0.75rem; /* py-2 px-3 */
+            color: var(--color-text-base);
+            width: 100%;
+        }
+        .neum-form-inset::placeholder {
+            color: var(--color-text-muted);
+        }
+        
+        /* --- Custom Toggle Switch (to match image) --- */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px; /* Width of the toggle */
+            height: 28px; /* Height of the toggle */
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--color-bg);
+            box-shadow: inset 3px 3px 6px var(--color-shadow-dark), inset -3px -3px 6px var(--color-shadow-light);
+            transition: .4s;
+            border-radius: 28px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px; /* Height of the knob */
+            width: 20px; /* Width of the knob */
+            left: 4px;
+            bottom: 4px;
+            background-color: var(--color-bg);
+            box-shadow: 2px 2px 4px var(--color-shadow-dark), -2px -2px 4px var(--color-shadow-light);
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: var(--color-bg-accent);
+            box-shadow: none; /* Flat when active */
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(22px); /* Move knob to the right */
+            background-color: #FFFFFF; /* White knob when active */
+            box-shadow: 0 0 2px rgba(0,0,0,0.2);
+        }
+
+    </style>
+</head>
+<body class="font-sans">
+    <!-- Main application container -->
+    <div id="app"></div>
+
+    <script type="module">
+        // --- ENUMS & CONSTANTS ---
+
+        const TaskStatus = {
+            Backlog: 'Backlog', ToDo: 'To Do', InProgress: 'In Progress', Testing: 'Testing/Review', Done: 'Done',
+        };
+        const TaskType = {
+            Feature: 'Feature', Bug: 'Bug', Chore: 'Chore', Docs: 'Docs', Research: 'Research',
+        };
+        const PriorityBucket = {
+            QuickWin: 'Quick Win', MajorBuild: 'Major Build', FillIn: 'Fill-in', TimeSink: 'Time Sink',
+        };
+
+        const TASK_STATUS_ORDER = [TaskStatus.Backlog, TaskStatus.ToDo, TaskStatus.InProgress, TaskStatus.Testing, TaskStatus.Done];
+        
+        const Icons = {
+            Ship: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>`,
+            Feature: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>`,
+            Bug: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>`,
+            Chore: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`,
+            Docs: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>`,
+            Research: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>`,
+            Blocker: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-red-600" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.367zM5.11 13.476A6 6 0 0113.477 5.11l-8.367 8.367zM10 18a8 8 0 100-16 8 8 0 000 16z" clip-rule="evenodd" /></svg>`,
+            Plus: (className = "h-5 w-5") => `<svg xmlns="http://www.w3.org/2000/svg" class="${className}" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
+            Edit: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>`,
+            Delete: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>`,
+            Check: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`,
+            Close: (className = "h-5 w-5") => `<svg xmlns="http://www.w3.org/2000/svg" class="${className}" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>`,
+            Chart: () => `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>`,
+            Sun: (className = "h-5 w-5") => `<svg xmlns="http://www.w3.org/2000/svg" class="${className}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 12a5 5 0 100-10 5 5 0 000 10z" /></svg>`,
+            Moon: (className = "h-5 w-5") => `<svg xmlns="http://www.w3.org/2000/svg" class="${className}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>`,
+            Home: (className = "h-5 w-5") => `<svg xmlns="http://www.w3.org/2000/svg" class="${className}" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg>`,
+        };
+        
+        // --- Neumorphic-friendly styles: Use colored text instead of backgrounds ---
+        const TASK_TYPE_STYLES = {
+            [TaskType.Feature]: { icon: Icons.Feature, color: 'text-skin-accent' },
+            [TaskType.Bug]: { icon: Icons.Bug, color: 'text-skin-accent-red' },
+            [TaskType.Chore]: { icon: Icons.Chore, color: 'text-skin-muted' },
+            [TaskType.Docs]: { icon: Icons.Docs, color: 'text-skin-accent-green' },
+            [TaskType.Research]: { icon: Icons.Research, color: 'text-skin-accent-purple' },
+        };
+
+        // --- APPLICATION STATE ---
+
+        const defaultState = {
+            deliverables: [
+                { id: 'd1', title: 'v1.1 App Launch', targetAudience: 'Users', finalFormat: 'Web App', definitionOfDone: 'App is deployed to production and accessible to all users.' },
+                { id: 'd2', title: 'Client Report Q4', targetAudience: 'Client', finalFormat: 'PDF', definitionOfDone: 'Report is approved by the client and sent.' },
+                { id: 'd3', title: 'Bugfix Patch 1.2.1', targetAudience: 'Users', finalFormat: 'Hotfix', definitionOfDone: 'Patch is live and critical bug is resolved.' },
+            ],
+            tasks: [
+                { id: 't1', deliverableId: 'd1', title: 'Implement user authentication', type: TaskType.Feature, status: TaskStatus.Done, isBlocked: false, blockerReason: '', impact: 5, effort: 3 },
+                { id: 't2', deliverableId: 'd1', title: 'Design the new dashboard', type: TaskType.Feature, status: TaskStatus.Done, isBlocked: false, blockerReason: '', impact: 5, effort: 5 },
+                { id: 't3', deliverableId: 'd1', title: 'Fix login button color', type: TaskType.Bug, status: TaskStatus.Done, isBlocked: false, blockerReason: '', impact: 2, effort: 1 },
+                { id: 't4', deliverableId: 'd1', title: 'Set up production database', type: TaskType.Chore, status: TaskStatus.Testing, isBlocked: false, blockerReason: '', impact: 4, effort: 4 },
+                { id: 't5', deliverableId: 'd1', title: 'Write API documentation for auth', type: TaskType.Docs, status: TaskStatus.InProgress, isBlocked: true, blockerReason: 'Waiting for final API spec', impact: 3, effort: 2 },
+                { id: 't6', deliverableId: 'd1', title: 'Research payment gateways', type: TaskType.Research, status: TaskStatus.ToDo, isBlocked: false, blockerReason: '', impact: 4, effort: 3 },
+                { id: 't7', deliverableId: 'd1', title: 'Create user profile page', type: TaskType.Feature, status: TaskStatus.ToDo, isBlocked: false, blockerReason: '', impact: 5, effort: 2 },
+                { id: 't8', deliverableId: 'd2', title: 'Gather Q4 sales data', type: TaskType.Research, status: TaskStatus.InProgress, isBlocked: false, blockerReason: '', impact: 5, effort: 2 },
+                { id: 't9', deliverableId: 'd2', title: 'Generate charts and graphs', type: TaskType.Feature, status: TaskStatus.Backlog, isBlocked: false, blockerReason: '', impact: 4, effort: 3 },
+                { id: 't11', deliverableId: 'd3', title: 'Replicate production bug', type: TaskType.Bug, status: TaskStatus.Done, isBlocked: false, blockerReason: '', impact: 5, effort: 1 },
+                { id: 't12', deliverableId: 'd3', title: 'Write regression test', type: TaskType.Chore, status: TaskStatus.Done, isBlocked: false, blockerReason: '', impact: 4, effort: 2 },
+                { id: 't13', deliverableId: 'd3', title: 'Implement the fix', type: TaskType.Bug, status: TaskStatus.Done, isBlocked: false, blockerReason: '', impact: 5, effort: 2 },
+                { id: 't14', deliverableId: 'd3', title: 'Deploy hotfix to staging', type: TaskType.Chore, status: TaskStatus.Testing, isBlocked: false, blockerReason: '', impact: 4, effort: 1 },
+            ],
+            triageItems: [
+                { id: 'tr1', text: 'New idea: Add dark mode to the app' },
+                { id: 'tr2', text: 'Bug report: Images are not loading on the gallery page' },
+            ],
+            shippedDeliverables: [],
+            currentView: 'home', // 'home', 'dashboard', 'deliverable', 'analytics', 'hallOfFame', 'reasoningPad'
+            selectedDeliverableId: null,
+            reasoningPads: {},
+            theme: 'light',
+        };
+
+        /**
+         * Saves the current state to localStorage.
+        */
+        function saveState() {
+            try {
+                const serializedState = JSON.stringify(state);
+                localStorage.setItem('shipperAppState', serializedState);
+            } catch (e) {
+                console.error("Could not save state", e);
+            }
+        }
+
+        /**
+         * Loads the state from localStorage, or returns the default state.
+        */
+        function loadState() {
+            try {
+                const serializedState = localStorage.getItem('shipperAppState');
+                if (serializedState === null) {
+                    return defaultState;
+                }
+                // Merge loaded state with defaults to ensure new properties like 'theme' are present
+                return { ...defaultState, ...JSON.parse(serializedState) };
+            } catch (e) {
+                console.error("Could not load state", e);
+                return defaultState;
+            }
+        }
+
+        let state = loadState();
+
+        // --- CORE LOGIC & UTILITIES ---
+
+        /**
+         * Generates a changelog using the Gemini API based on completed tasks.
+         */
+        async function generateChangelog(tasks) {
+            const completedFeatures = tasks.filter(t => t.type === TaskType.Feature).map(t => `- ${t.title}`).join('\n');
+            const completedBugFixes = tasks.filter(t => t.type === TaskType.Bug).map(t => `- ${t.title}`).join('\n');
+            
+            const systemPrompt = "You are an expert technical writer creating a changelog. Based on the provided tasks, generate a concise and user-friendly changelog in Markdown format. Use '### ✨ New Features' and '### 🐛 Bug Fixes' sections. Omit empty sections. The tone should be celebratory but professional. You only output Markdown.";
+            const userQuery = `Completed Features:\n${completedFeatures || 'None'}\n\nCompleted Bug Fixes:\n${completedBugFixes || 'None'}\n\nGenerate the changelog now.`;
+
+            return new Promise((resolve) => {
+                const messageId = Math.random().toString(36).substring(7);
+                
+                const handler = (event) => {
+                    if (event.data?.type === 'SHIPPER_AI_RESPONSE' && event.data.id === messageId) {
+                        window.removeEventListener('message', handler);
+                        if (event.data.error) {
+                            console.error("Error generating changelog:", event.data.error);
+                            resolve("### ✨ New Features\n" + (completedFeatures || "No new features") + "\n\n### 🐛 Bug Fixes\n" + (completedBugFixes || "No bug fixes"));
+                        } else {
+                            resolve(event.data.text);
+                        }
+                    }
+                };
+                
+                window.addEventListener('message', handler);
+                window.parent.postMessage({
+                    type: 'SHIPPER_AI_REQUEST',
+                    id: messageId,
+                    systemPrompt,
+                    userQuery
+                }, '*');
+            });
+        }
+        
+        /**
+         * Determines the priority bucket for a task based on impact and effort.
+         */
+        const getPriorityBucket = (task) => {
+            if (task.impact >= 4 && task.effort <= 2) return PriorityBucket.QuickWin;
+            if (task.impact >= 4 && task.effort > 2) return PriorityBucket.MajorBuild;
+            if (task.impact < 4 && task.effort <= 2) return PriorityBucket.FillIn;
+            return PriorityBucket.TimeSink;
+        };
+
+        const AppContainer = document.getElementById('app');
+
+        // --- RENDER FUNCTIONS (VIEWS) ---
+
+        /**
+         * Renders the main application header.
+         */
+        function renderHeader() {
+            const themeIcon = state.theme === 'light' ? Icons.Moon('h-5 w-5') : Icons.Sun('h-5 w-5');
+            return `
+            <header class="neum-card sticky top-0 z-10 rounded-none">
+                <nav class="container mx-auto px-4 sm:px-6 md:px-8 py-3 flex justify-between items-center">
+                    <div class="text-2xl font-bold cursor-pointer text-skin-heading" data-action="navigate" data-view="home">
+                        <span class="text-skin-accent">Ship</span>per
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button data-action="navigate" data-view="home" class="px-4 py-2 rounded-lg text-sm font-medium ${state.currentView === 'home' ? 'neum-inset text-skin-accent' : 'neum-button'}">Home</button>
+                        <button data-action="navigate" data-view="dashboard" class="px-4 py-2 rounded-lg text-sm font-medium ${state.currentView === 'dashboard' ? 'neum-inset text-skin-accent' : 'neum-button'}">Dashboard</button>
+                        <button data-action="navigate" data-view="analytics" class="px-4 py-2 rounded-lg text-sm font-medium ${state.currentView === 'analytics' ? 'neum-inset text-skin-accent' : 'neum-button'}">Analytics</button>
+                        <button data-action="navigate" data-view="hallOfFame" class="px-4 py-2 rounded-lg text-sm font-medium ${state.currentView === 'hallOfFame' ? 'neum-inset text-skin-accent' : 'neum-button'}">Hall of Fame</button>
+                        <button data-action="navigate" data-view="reasoningPad" class="px-4 py-2 rounded-lg text-sm font-medium ${state.currentView === 'reasoningPad' ? 'neum-inset text-skin-accent' : 'neum-button'}">Reasoning Pad</button>
+                        <button data-action="toggle-theme" title="Toggle Theme" class="neum-icon-button">
+                            ${themeIcon}
+                        </button>
+                    </div>
+                </nav>
+            </header>`;
+        }
+        
+        /**
+         * Renders a single task card.
+         */
+        function renderTaskCard(task, showDeliverableContext = false) {
+            const typeStyle = TASK_TYPE_STYLES[task.type];
+            const priorityBucket = getPriorityBucket(task);
+            const priorityStyles = {
+                [PriorityBucket.QuickWin]: 'border-l-4 border-skin-accent-green',
+                [PriorityBucket.MajorBuild]: 'border-l-4 border-skin-accent-blue',
+                [PriorityBucket.FillIn]: 'border-l-4 border-skin-accent-yellow',
+                [PriorityBucket.TimeSink]: 'border-l-4 border-skin-accent-red',
+            };
+
+            // Dynamic actions based on task status
+            const actions = {
+                [TaskStatus.Backlog]: `<button data-action="update-task-status" data-id="${task.id}" data-status="${TaskStatus.ToDo}" class="text-xs neum-button px-3 py-1 rounded-lg">To Do</button>`,
+                [TaskStatus.ToDo]: `<button data-action="update-task-status" data-id="${task.id}" data-status="${TaskStatus.InProgress}" class="text-xs neum-button text-skin-accent px-3 py-1 rounded-lg">Start</button>`,
+                [TaskStatus.InProgress]: `<button data-action="update-task-status" data-id="${task.id}" data-status="${TaskStatus.Testing}" class="text-xs neum-button text-skin-accent-purple px-3 py-1 rounded-lg">Review</button>`,
+                [TaskStatus.Testing]: `<button data-action="update-task-status" data-id="${task.id}" data-status="${TaskStatus.Done}" class="text-xs neum-button text-skin-accent-green px-3 py-1 rounded-lg">Done</button>`,
+                [TaskStatus.Done]: ''
+            };
+
+            const deliverable = showDeliverableContext ? state.deliverables.find(d => d.id === task.deliverableId) : null;
+
+            return `
+            <div class="neum-card p-4 rounded-lg mb-4 ${priorityStyles[priorityBucket]} group">
+                <div class="flex justify-between items-start">
+                    <div class="flex-grow">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="w-8 h-8 rounded-full flex items-center justify-center neum-inset ${typeStyle.color}">${typeStyle.icon()}</span>
+                            <div class="flex flex-col">
+                                <span class="text-sm font-semibold text-skin-base">${task.type}</span>
+                                <span class="text-xs neum-inset px-2 py-0.5 rounded-full text-skin-muted self-start mt-1">${priorityBucket}</span>
+                            </div>
+                        </div>
+                        <p class="text-skin-heading mb-1 font-medium">${task.title}</p>
+                        ${deliverable ? `<p class="text-xs text-skin-accent mb-1" title="Deliverable: ${deliverable.title}">→ ${deliverable.title}</p>` : ''}
+                        <div class="flex items-center gap-2 text-xs text-skin-muted">
+                            <span>Impact: ${task.impact}/5</span>
+                            <span>•</span>
+                            <span>Effort: ${task.effort}/5</span>
+                        </div>
+                        ${task.isBlocked ? `
+                        <div class="flex items-center gap-1 mt-2 text-skin-accent-red text-xs" title="${task.blockerReason}">
+                            ${Icons.Blocker()}<span>Blocked: ${task.blockerReason}</span>
+                        </div>` : ''}
+                    </div>
+                    <div class="flex-shrink-0 flex flex-col gap-1 items-end">
+                        ${actions[task.status] || ''}
+                        <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity mt-2">
+                            <button data-action="edit-task" data-id="${task.id}" class="neum-button p-2 rounded-lg text-skin-muted" title="Edit">${Icons.Edit()}</button>
+                            <button data-action="delete-task" data-id="${task.id}" class="neum-button p-2 rounded-lg text-skin-accent-red" title="Delete">${Icons.Delete()}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+        
+        /**
+         * Renders the new Home view.
+         */
+        function renderHome() {
+            const whatsNextTasks = state.tasks.filter(task => task.status === TaskStatus.ToDo && !task.isBlocked);
+            const blockedTasks = state.tasks.filter(t => t.isBlocked && t.status !== TaskStatus.Done);
+            const inProgressTasks = state.tasks.filter(t => t.status === TaskStatus.InProgress);
+
+            return `
+            <main class="p-4 sm:p-6 md:p-8">
+                <h1 class="text-3xl font-bold text-skin-heading mb-8">Home</h1>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6" style="grid-template-rows: repeat(auto-fill, minmax(150px, 1fr));">
+                    
+                    <!-- Welcome Card -->
+                    <div class="neum-card p-6 rounded-lg md:col-span-2">
+                        <h2 class="text-2xl font-bold text-skin-heading">Welcome Back!</h2>
+                        <p class="text-skin-muted mt-2">Here's a quick look at your projects. Ready to ship?</p>
+                    </div>
+
+                    <!-- What's Next (Circle) -->
+                    <div data-action="navigate" data-view="dashboard" class="neum-circle w-full aspect-square cursor-pointer p-4">
+                        <div>
+                            <span class="text-5xl font-bold text-skin-accent">${whatsNextTasks.length}</span>
+                            <p class="font-semibold text-skin-base mt-1">What's Next?</p>
+                        </div>
+                    </div>
+
+                    <!-- Analytics Sneak Peek (Replaces Blocked Circle) -->
+                    <div data-action="navigate" data-view="analytics" class="neum-card w-full aspect-square cursor-pointer p-4 flex flex-col justify-center items-center">
+                        <h3 class="text-sm font-semibold text-skin-muted mb-2 text-center">Task Status</h3>
+                        <div class="w-full h-full max-h-[150px]">
+                            <canvas id="homeAnalyticsChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Triage Card (Tall) -->
+                    <div class="neum-card p-6 rounded-lg md:row-span-2">
+                        <h2 class="text-xl font-bold text-skin-heading mb-4">📥 Triage</h2>
+                        <div class="neum-inset p-4 rounded-lg h-full">
+                            <span class="text-5xl font-bold text-skin-heading">${state.triageItems.length}</span>
+                            <p class="text-skin-muted mt-1">Items to review</p>
+                            <button data-action="add-triage-item" class="neum-button text-sm font-semibold py-2 px-3 rounded-lg mt-6">
+                                Add Item
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Active Deliverables (Large) -->
+                    <div class="neum-card p-6 rounded-lg md:col-span-3 md:row-span-2">
+                        <h2 class="text-xl font-bold text-skin-heading mb-4">🚀 Active Deliverables</h2>
+                        <div class="space-y-4 h-[calc(100%-2rem)] overflow-y-auto pr-2">
+                            ${state.deliverables.map(d => {
+                                const tasks = state.tasks.filter(t => t.deliverableId === d.id);
+                                const doneTasks = tasks.filter(t => t.status === TaskStatus.Done).length;
+                                const progress = tasks.length > 0 ? Math.round((doneTasks / tasks.length) * 100) : 0;
+                                return `
+                                <div data-action="select-deliverable" data-id="${d.id}" class="neum-inset p-4 rounded-lg cursor-pointer hover:bg-opacity-50" style="background: var(--color-bg); box-shadow: inset 4px 4px 8px var(--color-shadow-dark), inset -4px -4px 8px var(--color-shadow-light);">
+                                    <h3 class="font-bold text-lg text-skin-accent">${d.title}</h3>
+                                    <div class="mt-3">
+                                        <div class="flex justify-between text-xs text-skin-muted mb-1">
+                                            <span>${doneTasks}/${tasks.length} tasks</span>
+                                            <span>${progress}%</span>
+                                        </div>
+                                        <div class="w-full bg-skin-progress-track rounded-full h-2 neum-inset">
+                                            <div class="bg-skin-accent h-2 rounded-full transition-all" style="width: ${progress}%"></div>
+                                        </div>
+                                    </div>
+                                </div>`;
+                            }).join('')}
+                            <button data-action="add-deliverable" class="neum-inset p-4 rounded-lg w-full text-center text-skin-muted hover:bg-opacity-50" style="background: var(--color-bg); box-shadow: inset 4px 4px 8px var(--color-shadow-dark), inset -4px -4px 8px var(--color-shadow-light);">
+                                ${Icons.Plus('h-5 w-5 mx-auto mb-1')}
+                                New Deliverable
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </main>
+            `;
+        }
+
+        /**
+         * Renders the main dashboard view.
+         */
+        function renderDashboard() {
+            const priorityBucketOrder = { [PriorityBucket.QuickWin]: 1, [PriorityBucket.MajorBuild]: 2, [PriorityBucket.FillIn]: 3, [PriorityBucket.TimeSink]: 4 };
+            
+            // Get top 5 "To Do" tasks, sorted by priority
+            const whatsNextTasks = state.tasks
+                .filter(task => task.status === TaskStatus.ToDo && !task.isBlocked)
+                .sort((a, b) => {
+                    const bucketA = priorityBucketOrder[getPriorityBucket(a)];
+                    const bucketB = priorityBucketOrder[getPriorityBucket(b)];
+                    return bucketA !== bucketB ? bucketA - bucketB : b.impact - a.impact;
+                })
+                .slice(0, 5);
+
+            const blockedTasks = state.tasks.filter(t => t.isBlocked && t.status !== TaskStatus.Done);
+
+            return `
+            <main class="p-4 sm:p-6 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left/Main Column -->
+                <div class="lg:col-span-2 space-y-8">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-2xl font-bold text-skin-heading">🎯 What's Next?</h2>
+                        <button data-action="navigate" data-view="reasoningPad" class="neum-button text-skin-base font-semibold py-2 px-4 rounded-lg flex items-center">
+                            🤔 Go to Reasoning Pad
+                        </button>
+                    </div>
+                    <div>
+                        <div class="space-y-4">
+                            ${whatsNextTasks.length > 0 ? whatsNextTasks.map(t => renderTaskCard(t, true)).join('') : `<div class="neum-inset p-4 rounded-lg text-center text-skin-muted">Nothing to do right now!</div>`}
+                        </div>
+                    </div>
+                    
+                    ${blockedTasks.length > 0 ? `
+                    <div>
+                        <h2 class="text-2xl font-bold mb-4 text-skin-accent-red">🚫 Blocked Tasks (${blockedTasks.length})</h2>
+                        <div class="space-y-3">
+                            ${blockedTasks.map(t => renderTaskCard(t, true)).join('')}
+                        </div>
+                    </div>` : ''}
+                    
+                    <div>
+                        <h2 class="text-2xl font-bold mb-4 text-skin-heading">🚀 Active Deliverables</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            ${state.deliverables.map(d => {
+                                const tasks = state.tasks.filter(t => t.deliverableId === d.id);
+                                const doneTasks = tasks.filter(t => t.status === TaskStatus.Done).length;
+                                const progress = tasks.length > 0 ? Math.round((doneTasks / tasks.length) * 100) : 0;
+                                return `
+                                <div data-action="select-deliverable" data-id="${d.id}" class="neum-card p-4 rounded-lg cursor-pointer hover:neum-inset">
+                                    <h3 class="font-bold text-lg text-skin-accent">${d.title}</h3>
+                                    <p class="text-sm text-skin-muted mt-1">${d.finalFormat} for ${d.targetAudience}</p>
+                                    <div class="mt-3">
+                                        <div class="flex justify-between text-xs text-skin-muted mb-1">
+                                            <span>${doneTasks}/${tasks.length} tasks</span>
+                                            <span>${progress}%</span>
+                                        </div>
+                                        <div class="w-full bg-skin-progress-track rounded-full h-2 neum-inset">
+                                            <div class="bg-skin-accent h-2 rounded-full transition-all" style="width: ${progress}%"></div>
+                                        </div>
+                                    </div>
+                                </div>`;
+                            }).join('')}
+                            <button data-action="add-deliverable" class="neum-inset p-4 rounded-lg transition-all duration-200 hover:shadow-none flex items-center justify-center min-h-[120px]">
+                                <div class="text-center text-skin-muted">
+                                    ${Icons.Plus('h-6 w-6 mb-1')}
+                                    <span>New Deliverable</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right Column (Triage) -->
+                <div>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold text-skin-heading">📥 Triage</h2>
+                        <button data-action="add-triage-item" title="Add Triage Item" class="neum-icon-button">${Icons.Plus('h-4 w-4')}</button>
+                    </div>
+                    <div class="neum-inset p-4 rounded-lg space-y-3 h-[calc(100vh-12rem)] overflow-y-auto">
+                        ${state.triageItems.map(item => `
+                            <div class="neum-card p-3 rounded-md text-sm text-skin-base group relative">
+                                ${item.text}
+                                <button data-action="delete-triage-item" data-id="${item.id}" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-skin-accent-red hover:text-red-500" title="Delete Triage Item">${Icons.Close('h-4 w-4')}</button>
+                            </div>`
+                        ).join('')}
+                        ${state.triageItems.length === 0 ? `<div class="text-center text-skin-muted py-8">No items in triage</div>` : ''}
+                    </div>
+                </div>
+            </main>`;
+        }
+        
+        /**
+         * Renders the detailed view for a single deliverable (Kanban board).
+         */
+        function renderDeliverableDetail() {
+            const deliverable = state.deliverables.find(d => d.id === state.selectedDeliverableId);
+            if (!deliverable) {
+                state.currentView = 'dashboard';
+                state.selectedDeliverableId = null;
+                return renderDashboard();
+            }
+            
+            const tasks = state.tasks.filter(t => t.deliverableId === deliverable.id);
+            const isReadyToShip = tasks.length > 0 && tasks.every(t => t.status === TaskStatus.Done);
+            
+            return `
+            <main class="p-4 sm:p-6 md:p-8 h-[calc(100vh-60px)] flex flex-col">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <button data-action="navigate" data-view="dashboard" class="text-skin-accent hover:text-skin-accent-hover mb-2">&larr; Back to Dashboard</button>
+                        <h1 class="text-3xl font-bold text-skin-heading">${deliverable.title}</h1>
+                        <p class="text-skin-muted mt-1">${deliverable.definitionOfDone}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button data-action="add-task" data-deliverable-id="${deliverable.id}" class="neum-button text-skin-base font-semibold py-2 px-4 rounded-lg flex items-center">${Icons.Plus()} Task</button>
+                        ${isReadyToShip ? `<button data-action="open-ship-modal" data-id="${deliverable.id}" class="neum-button text-skin-accent-green font-bold py-2 px-4 rounded-lg flex items-center transition-transform duration-200 hover:scale-105">${Icons.Ship()}Ship It!</button>` : ''}
+                    </div>
+                </div>
+                <div class="flex-grow overflow-hidden">
+                    <div class="flex gap-4 overflow-x-auto p-1 pb-4 h-full">
+                        ${TASK_STATUS_ORDER.map(status => {
+                            const statusTasks = tasks.filter(t => t.status === status);
+                            return `
+                            <div class="neum-inset rounded-lg p-3 w-72 flex-shrink-0 flex flex-col">
+                                <h3 class="font-bold text-lg mb-4 text-skin-muted tracking-wider flex justify-between items-center">
+                                    <span>${status}</span>
+                                    <span class="text-sm font-normal neum-button px-2 py-0.5 rounded-full">${statusTasks.length}</span>
+                                </h3>
+                                <div class="space-y-3 overflow-y-auto pr-1 flex-grow">
+                                    ${statusTasks.length > 0 ? statusTasks.map(renderTaskCard).join('') : '<div class="h-10"></div>'}
+                                </div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>
+            </main>`;
+        }
+
+        /**
+         * Renders the Analytics view.
+        */
+        function renderAnalytics() {
+            const tasks = state.tasks;
+            const statusCounts = TASK_STATUS_ORDER.map(status => tasks.filter(t => t.status === status).length);
+            const typeCounts = Object.values(TaskType).map(type => tasks.filter(t => t.type === type).length);
+
+            const content = `
+                <main class="p-4 sm:p-6 md:p-8">
+                    <h1 class="text-3xl font-bold text-skin-heading">Analytics</h1>
+                    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="neum-card p-6 rounded-lg">
+                            <h2 class="text-xl font-bold mb-4 text-skin-heading">Tasks by Status</h2>
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                        <div class="neum-card p-6 rounded-lg">
+                            <h2 class="text-xl font-bold mb-4 text-skin-heading">Tasks by Type</h2>
+                            <canvas id="typeChart"></canvas>
+                        </div>
+                    </div>
+                </main>`;
+            
+            setTimeout(() => {
+                const computedStyles = getComputedStyle(document.body);
+                const chartTextColor = computedStyles.getPropertyValue('--color-chart-text');
+                const chartGridColor = computedStyles.getPropertyValue('--color-chart-grid');
+
+                new Chart(document.getElementById('statusChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: TASK_STATUS_ORDER,
+                        datasets: [{
+                            data: statusCounts,
+                            backgroundColor: ['#6B7280', '#3B82F6', '#A855F7', '#10B981', '#16A34A'],
+                        }]
+                    },
+                    options: { plugins: { legend: { labels: { color: chartTextColor } } } }
+                });
+                new Chart(document.getElementById('typeChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: Object.values(TaskType),
+                        datasets: [{
+                            data: typeCounts,
+                            backgroundColor: ['#3B82F6', '#EF4444', '#6B7280', '#10B981', '#8B5CF6'],
+                            label: 'Task Count'
+                        }]
+                    },
+                    options: { 
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { ticks: { color: chartTextColor }, grid: { color: chartGridColor } },
+                            x: { ticks: { color: chartTextColor }, grid: { color: chartGridColor } }
+                        }
+                    }
+                });
+            }, 0);
+
+            return content;
+        }
+
+        /**
+         * Renders the Hall of Fame view (shipped deliverables).
+         */
+        function renderHallOfFame() {
+            return `
+            <main class="p-4 sm:p-6 md:p-8">
+                <h1 class="text-3xl font-bold text-skin-heading">🏆 Hall of Fame</h1>
+                <p class="text-skin-muted mt-1">A record of all successfully shipped deliverables.</p>
+                <div class="mt-6 space-y-4">
+                    ${state.shippedDeliverables.length === 0 ? `
+                        <div class="neum-inset p-8 rounded-lg text-center text-skin-muted">
+                            <p>No deliverables shipped yet. Get to work!</p>
+                        </div>
+                    ` : state.shippedDeliverables.map(d => `
+                        <div class="neum-card p-4 rounded-lg">
+                            <h2 class="text-xl font-bold text-skin-accent-green">${d.title}</h2>
+                            <p class="text-sm text-skin-muted mt-1">Shipped on: ${d.shippedDate}</p>
+                            <div class="mt-3 text-sm text-skin-base">${d.changelog.replace(/\n/g, '<br>')}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </main>`;
+        }
+
+        /**
+         * Renders the Reasoning Pad view.
+        */
+        function renderReasoningPad() {
+            const selectedDeliverableId = state.selectedDeliverableId || (state.deliverables.length > 0 ? state.deliverables[0].id : null);
+            const deliverable = state.deliverables.find(d => d.id === selectedDeliverableId);
+            const doneTasks = deliverable ? state.tasks.filter(t => t.deliverableId === deliverable.id && t.status === TaskStatus.Done) : [];
+            const reasoningText = state.reasoningPads[selectedDeliverableId] || '';
+
+            return `
+            <main class="p-4 sm:p-6 md:p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-skin-heading">🤔 Reasoning Pad</h1>
+                    <select id="reasoning-pad-deliverable-select" data-action="select-reasoning-deliverable" class="neum-form-inset w-auto max-w-xs">
+                        ${state.deliverables.map(d => `<option value="${d.id}" ${d.id === selectedDeliverableId ? 'selected' : ''}>${d.title}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-4 text-skin-heading">✅ Completed Tasks</h2>
+                        <div class="neum-inset p-4 rounded-lg h-[calc(100vh-20rem)] overflow-y-auto">
+                            ${deliverable ? (doneTasks.length > 0 ? doneTasks.map(t => `
+                                <div class="neum-card p-3 rounded-md mb-3">
+                                    <p class="font-semibold text-skin-base">${t.title}</p>
+                                    <p class="text-xs text-skin-muted">${t.type}</p>
+                                </div>
+                            `).join('') : '<p class="text-skin-muted">No completed tasks for this deliverable.</p>') : '<p class="text-skin-muted">Select a deliverable to see completed tasks.</p>'}
+                        </div>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold mb-4 text-skin-heading">📝 What\'s Next?</h2>
+                        <textarea id="reasoning-pad-textarea" class="w-full neum-form-inset h-[calc(100vh-23rem)]" placeholder="Based on what\'s done, what\'s the next logical step? What are the risks? What\'s the opportunity?">${reasoningText}</textarea>
+                        <div class="flex justify-end gap-2 mt-4">
+                            <button data-action="clear-reasoning-pad" class="neum-button text-skin-base font-semibold py-2 px-4 rounded-lg">Clear</button>
+                            <button data-action="save-reasoning-pad" class="neum-button text-skin-accent font-semibold py-2 px-4 rounded-lg">Save</button>
+                        </div>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold mb-4">📝 What\'s Next?</h2>
+                        <textarea id="reasoning-pad-textarea" class="w-full neum-inset border-none rounded-md shadow-sm py-2 px-3 text-gray-700 focus:outline-none h-[calc(100vh-23rem)]" placeholder="Based on what\'s done, what\'s the next logical step? What are the risks? What\'s the opportunity?">${reasoningText}</textarea>
+                        <div class="flex justify-end gap-2 mt-4">
+                            <button data-action="clear-reasoning-pad" class="neum-button text-gray-700 font-semibold py-2 px-4 rounded-lg">Clear</button>
+                            <button data-action="save-reasoning-pad" class="neum-button text-blue-600 font-semibold py-2 px-4 rounded-lg">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </main>`;
+        }
+
+
+        // --- RENDER FUNCTIONS (MODALS & FORMS) ---
+
+        /**
+         * Renders a modal shell with given title and content.
+         */
+        function renderModal(title, content) {
+            const modalHTML = `
+            <div id="modal-backdrop" class="fixed inset-0 bg-transparent z-40" data-action="close-modal"></div>
+            <div id="modal-content" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 neum-card rounded-lg z-50 w-full max-w-lg animate-slide-in">
+                <div class="flex justify-between items-center p-4">
+                    <h3 class="text-xl font-bold text-skin-heading">${title}</h3>
+                    <button data-action="close-modal" class="text-skin-muted hover:text-skin-base">${Icons.Close()}</button>
+                </div>
+                <div class="p-6 pt-2">${content}</div>
+            </div>`;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+        }
+
+        /**
+         * Closes any active modal.
+         */
+        function closeModal() {
+            document.getElementById('modal-backdrop')?.remove();
+            document.getElementById('modal-content')?.remove();
+        }
+
+        /**
+         * Renders the form for creating/editing a task.
+         */
+        function renderTaskForm(task = {}, deliverableId = null) {
+            const isEditing = !!task.id;
+            const taskId = task.id || `t${Date.now()}`;
+            const title = task.title || '';
+            const type = task.type || TaskType.Feature;
+            const status = task.status || TaskStatus.Backlog;
+            const impact = task.impact || 3;
+            const effort = task.effort || 3;
+            const isBlocked = task.isBlocked || false;
+            const blockerReason = task.blockerReason || '';
+            const taskDeliverableId = task.deliverableId || deliverableId || state.selectedDeliverableId;
+            
+            const formContent = `
+            <form id="task-form" data-action="submit-task-form" data-id="${taskId}">
+                <input type="hidden" name="deliverableId" value="${taskDeliverableId}">
+                <div class="space-y-4">
+                    <div>
+                        <label for="title" class="block text-sm font-medium text-skin-muted mb-1">Title</label>
+                        <input type="text" name="title" id="title" value="${title}" required class="neum-form-inset">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="type" class="block text-sm font-medium text-skin-muted mb-1">Type</label>
+                            <select name="type" id="type" class="neum-form-inset">
+                                ${Object.values(TaskType).map(t => `<option value="${t}" ${t === type ? 'selected' : ''}>${t}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="status" class="block text-sm font-medium text-skin-muted mb-1">Status</label>
+                            <select name="status" id="status" class="neum-form-inset">
+                                ${TASK_STATUS_ORDER.map(s => `<option value="${s}" ${s === status ? 'selected' : ''}>${s}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="impact" class="block text-sm font-medium text-skin-muted">Impact (1-5)</label>
+                            <input type="range" name="impact" id="impact" min="1" max="5" value="${impact}" class="mt-1 block w-full">
+                        </div>
+                        <div>
+                            <label for="effort" class="block text-sm font-medium text-skin-muted">Effort (1-5)</label>
+                            <input type="range" name="effort" id="effort" min="1" max="5" value="${effort}" class="mt-1 block w-full">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="flex items-center justify-between">
+                            <span class="text-sm text-skin-muted">Is Blocked?</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="isBlocked" ${isBlocked ? 'checked' : ''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </label>
+                    </div>
+
+                    <div id="blocker-reason-container" class="${isBlocked ? '' : 'hidden'}">
+                        <label for="blockerReason" class="block text-sm font-medium text-skin-muted mb-1">Blocker Reason</label>
+                        <input type="text" name="blockerReason" id="blockerReason" value="${blockerReason}" class="neum-form-inset">
+                    </div>
+                    
+                    <div class="flex justify-end pt-4 mt-4 border-t border-skin-divider">
+                        <button type="button" data-action="close-modal" class="neum-button text-skin-base font-semibold py-2 px-4 rounded-lg mr-2">Cancel</button>
+                        <button type="submit" class="neum-button text-skin-accent font-semibold py-2 px-4 rounded-lg">${isEditing ? 'Save Changes' : 'Create Task'}</button>
+                    </div>
+                </div>
+            </form>
+            `;
+            renderModal(isEditing ? 'Edit Task' : 'New Task', formContent);
+
+            // Add event listener to toggle blocker reason
+            document.querySelector('input[name="isBlocked"]').addEventListener('change', (e) => {
+                document.getElementById('blocker-reason-container').classList.toggle('hidden', !e.target.checked);
+            });
+        }
+
+        /**
+         * Renders the form for creating a new deliverable.
+         */
+        function renderDeliverableForm() {
+            const formContent = `
+            <form id="deliverable-form" data-action="submit-deliverable-form">
+                <div class="space-y-4">
+                    <div>
+                        <label for="title" class="block text-sm font-medium text-skin-muted mb-1">Title</label>
+                        <input type="text" name="title" id="title" required class="neum-form-inset">
+                    </div>
+                    <div>
+                        <label for="targetAudience" class="block text-sm font-medium text-skin-muted mb-1">Target Audience</label>
+                        <input type="text" name="targetAudience" id="targetAudience" required class="neum-form-inset" placeholder="e.g., Internal Users, Client X">
+                    </div>
+                    <div>
+                        <label for="finalFormat" class="block text-sm font-medium text-skin-muted mb-1">Final Format</label>
+                        <input type="text" name="finalFormat" id="finalFormat" required class="neum-form-inset" placeholder="e.g., Web App, PDF Report, API Endpoint">
+                    </div>
+                    <div>
+                        <label for="definitionOfDone" class="block text-sm font-medium text-skin-muted mb-1">Definition of Done</label>
+                        <textarea name="definitionOfDone" id="definitionOfDone" rows="3" required class="neum-form-inset" placeholder="What does 'done' look like?"></textarea>
+                    </div>
+                    
+                    <div class="flex justify-end pt-4 mt-4 border-t border-skin-divider">
+                        <button type="button" data-action="close-modal" class="neum-button text-skin-base font-semibold py-2 px-4 rounded-lg mr-2">Cancel</button>
+                        <button type="submit" class="neum-button text-skin-accent font-semibold py-2 px-4 rounded-lg">Create Deliverable</button>
+                    </div>
+                </div>
+            </form>
+            `;
+            renderModal('New Deliverable', formContent);
+        }
+
+        /**
+         * Renders the modal for shipping a deliverable.
+         */
+        async function renderShipModal(deliverable) {
+            const tasks = state.tasks.filter(t => t.deliverableId === deliverable.id);
+            const title = `Ship "${deliverable.title}"?`;
+            
+            let modalContent = `
+            <form id="ship-form" data-action="ship-it" data-id="${deliverable.id}">
+                <p class="text-skin-muted mb-4">You're about to ship this deliverable. Let's automatically generate the changelog using Visual Notebook's AI providers.</p>
+                <div id="changelog-container" class="hidden mt-4">
+                    <div class="text-center p-8">
+                        <p class="text-lg text-skin-muted">Generating changelog...</p>
+                        <div class="mt-4 h-8 w-8 border-4 border-skin-accent border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    </div>
+                </div>
+                <div class="flex justify-end pt-4 mt-4 border-t border-skin-divider">
+                    <button type="button" data-action="close-modal" class="neum-button text-skin-base font-semibold py-2 px-4 rounded-lg mr-2">Cancel</button>
+                    <button type="button" id="generate-changelog-btn" class="neum-button text-skin-accent font-semibold py-2 px-4 rounded-lg">Generate Changelog</button>
+                    <button type="submit" id="ship-it-btn" class="neum-button text-skin-accent-green font-bold py-2 px-4 rounded-lg flex items-center hidden">${Icons.Ship()}Ship It!</button>
+                </div>
+            </form>
+            `;
+            renderModal(title, modalContent);
+
+            document.getElementById('generate-changelog-btn').addEventListener('click', async () => {
+                document.getElementById('changelog-container').classList.remove('hidden');
+                document.getElementById('generate-changelog-btn').classList.add('hidden');
+
+                const changelog = await generateChangelog(tasks);
+
+                document.getElementById('changelog-container').innerHTML = `
+                    <label for="changelog" class="block text-sm font-medium text-skin-muted mb-1">Changelog (Editable)</label>
+                    <textarea name="changelog" id="changelog" rows="10" class="mt-1 block w-full neum-form-inset">${changelog}</textarea>
+                `;
+
+                document.getElementById('ship-it-btn').classList.remove('hidden');
+            });
+        }
+
+
+        // --- MAIN RENDER FUNCTION ---
+
+        /**
+         * The main application render function.
+         * Wipes the #app container and redraws the UI based on state.
+         */
+        function render() {
+            saveState();
+            // Set the theme on the body
+            document.body.className = `theme-${state.theme} font-sans`;
+
+            let content = renderHeader();
+            
+            switch (state.currentView) {
+                case 'home':
+                    content += renderHome();
+                    // We must wait for the DOM to update before rendering the chart
+                    setTimeout(() => {
+                        const tasks = state.tasks;
+                        const statusCounts = TASK_STATUS_ORDER.map(status => tasks.filter(t => t.status === status).length);
+                        const homeChartEl = document.getElementById('homeAnalyticsChart');
+                        
+                        if (homeChartEl) {
+                            new Chart(homeChartEl, {
+                                type: 'doughnut',
+                                data: {
+                                    labels: TASK_STATUS_ORDER,
+                                    datasets: [{
+                                        data: statusCounts,
+                                        backgroundColor: ['#6B7280', '#3B82F6', '#A855F7', '#10B981', '#16A34A'],
+                                        borderWidth: 0,
+                                    }]
+                                },
+                                options: { 
+                                    plugins: { 
+                                        legend: { display: false },
+                                        tooltip: { enabled: true }
+                                    },
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                }
+                            });
+                        }
+                    }, 0);
+                    break;
+                case 'dashboard':
+                    content += renderDashboard();
+                    break;
+                case 'deliverable':
+                    content += renderDeliverableDetail();
+                    break;
+                case 'analytics':
+                    content += renderAnalytics();
+                    break;
+                case 'hallOfFame':
+                    content += renderHallOfFame();
+                    break;
+                case 'reasoningPad':
+                    content += renderReasoningPad();
+                    break;
+                default:
+                    content += renderDashboard();
+            }
+            
+            AppContainer.innerHTML = content;
+        }
+
+
+        // --- EVENT HANDLERS & LISTENERS ---
+
+        /**
+         * Handles all click events via event delegation.
+         */
+        document.addEventListener('click', (e) => {
+            const actionTarget = e.target.closest('[data-action]');
+            if (!actionTarget) return;
+
+            const action = actionTarget.dataset.action;
+            const id = actionTarget.dataset.id;
+
+            // Apply active state to buttons
+            if (actionTarget.classList.contains('neum-button') || actionTarget.classList.contains('neum-icon-button')) {
+                actionTarget.classList.add('neum-button-active');
+                setTimeout(() => actionTarget.classList.remove('neum-button-active'), 150);
+            }
+
+            switch (action) {
+                case 'navigate':
+                    state.currentView = actionTarget.dataset.view;
+                    if (state.currentView === 'dashboard' || state.currentView === 'home') {
+                        state.selectedDeliverableId = null;
+                    }
+                    render();
+                    break;
+                
+                case 'select-deliverable':
+                    state.selectedDeliverableId = id;
+                    state.currentView = 'deliverable';
+                    render();
+                    break;
+                
+                case 'add-deliverable':
+                    renderDeliverableForm();
+                    break;
+                
+                case 'add-task':
+                    renderTaskForm({}, actionTarget.dataset.deliverableId);
+                    break;
+
+                case 'edit-task': {
+                    const task = state.tasks.find(t => t.id === id);
+                    if (task) renderTaskForm(task);
+                    break;
+                }
+                
+                case 'delete-task': {
+                    const task = state.tasks.find(t => t.id === id);
+                    if (task) {
+                        const modalContent = `
+                            <p class="text-skin-muted">Are you sure you want to delete this task?</p>
+                            <p class="font-bold my-2 text-skin-heading">${task.title}</p>
+                            <div class="flex justify-end pt-4 mt-4 border-t border-skin-divider">
+                                <button type="button" data-action="close-modal" class="neum-button text-skin-base font-semibold py-2 px-4 rounded-lg mr-2">Cancel</button>
+                                <button type="button" data-action="confirm-delete-task" data-id="${id}" class="neum-button text-skin-accent-red font-semibold py-2 px-4 rounded-lg">Delete</button>
+                            </div>
+                        `;
+                        renderModal('Confirm Deletion', modalContent);
+                    }
+                    break;
+                }
+
+                case 'confirm-delete-task':
+                    state.tasks = state.tasks.filter(t => t.id !== id);
+                    closeModal();
+                    render();
+                    break;
+
+                case 'update-task-status':
+                    const task = state.tasks.find(t => t.id === id);
+                    if (task) {
+                        task.status = actionTarget.dataset.status;
+                        render();
+                    }
+                    break;
+
+                case 'add-triage-item': {
+                    const modalContent = `
+                        <form id="triage-form" data-action="submit-triage-form">
+                            <label for="triage-text" class="block text-sm font-medium text-skin-muted mb-1">New Triage Item</label>
+                            <textarea name="triage-text" id="triage-text" rows="3" required class="mt-1 block w-full neum-form-inset" placeholder="Enter new idea, bug report, or note..."></textarea>
+                            <div class="flex justify-end pt-4 mt-4 border-t border-skin-divider">
+                                <button type="button" data-action="close-modal" class="neum-button text-skin-base font-semibold py-2 px-4 rounded-lg mr-2">Cancel</button>
+                                <button type="submit" class="neum-button text-skin-accent font-semibold py-2 px-4 rounded-lg">Add Item</button>
+                            </div>
+                        </form>
+                    `;
+                    renderModal('Add to Triage', modalContent);
+                    break;
+                }
+                
+                case 'delete-triage-item':
+                    state.triageItems = state.triageItems.filter(item => item.id !== id);
+                    render();
+                    break;
+
+                case 'open-ship-modal': {
+                    const deliverable = state.deliverables.find(d => d.id === id);
+                    if (deliverable) renderShipModal(deliverable);
+                    break;
+                }
+                
+                case 'close-modal':
+                    closeModal();
+                    break;
+
+                case 'toggle-theme':
+                    state.theme = state.theme === 'light' ? 'dark' : 'light';
+                    render();
+                    break;
+
+                case 'save-reasoning-pad': {
+                    const deliverableId = document.getElementById('reasoning-pad-deliverable-select').value;
+                    const textarea = document.getElementById('reasoning-pad-textarea');
+                    state.reasoningPads[deliverableId] = textarea.value;
+                    render();
+                    break;
+                }
+                case 'clear-reasoning-pad': {
+                    const deliverableId = document.getElementById('reasoning-pad-deliverable-select').value;
+                    const textarea = document.getElementById('reasoning-pad-textarea');
+                    textarea.value = '';
+                    delete state.reasoningPads[deliverableId];
+                    render();
+                    break;
+                }
+            }
+        });
+
+        document.addEventListener('change', (e) => {
+            if (e.target.id === 'reasoning-pad-deliverable-select') {
+                state.selectedDeliverableId = e.target.value;
+                render();
+            }
+        });
+
+        /**
+         * Handles all form submissions.
+         */
+        document.addEventListener('submit', (e) => {
+            const form = e.target;
+            const action = form.dataset.action;
+            if (!action) return;
+
+            e.preventDefault();
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+
+            switch (action) {
+                case 'submit-task-form': {
+                    const id = form.dataset.id;
+                    const existingTask = state.tasks.find(t => t.id === id);
+                    
+                    const taskData = {
+                        id: id,
+                        title: data.title,
+                        deliverableId: data.deliverableId,
+                        type: data.type,
+                        status: data.status,
+                        impact: parseInt(data.impact, 10),
+                        effort: parseInt(data.effort, 10),
+                        isBlocked: data.isBlocked === 'on',
+                        blockerReason: data.isBlocked === 'on' ? data.blockerReason : '',
+                    };
+
+                    if (existingTask) {
+                        // Update
+                        Object.assign(existingTask, taskData);
+                    } else {
+                        // Create
+                        state.tasks.push(taskData);
+                    }
+                    
+                    closeModal();
+                    render();
+                    break;
+                }
+
+                case 'submit-deliverable-form': {
+                    const newDeliverable = {
+                        id: `d${Date.now()}`,
+                        title: data.title,
+                        targetAudience: data.targetAudience,
+                        finalFormat: data.finalFormat,
+                        definitionOfDone: data.definitionOfDone,
+                    };
+                    state.deliverables.push(newDeliverable);
+                    closeModal();
+                    render();
+                    break;
+                }
+
+                case 'submit-triage-form': {
+                    const text = data['triage-text'];
+                    if (text) {
+                        state.triageItems.push({ id: `tr${Date.now()}`, text: text });
+                        closeModal();
+                        render();
+                    }
+                    break;
+                }
+
+                case 'ship-it': {
+                    const id = form.dataset.id;
+                    const deliverableIndex = state.deliverables.findIndex(d => d.id === id);
+                    if (deliverableIndex > -1) {
+                        const [shippedDeliverable] = state.deliverables.splice(deliverableIndex, 1);
+                        
+                        // Add to Hall of Fame
+                        shippedDeliverable.shippedDate = new Date().toLocaleDateString();
+                        shippedDeliverable.changelog = data.changelog;
+                        state.shippedDeliverables.unshift(shippedDeliverable);
+
+                        // Remove associated tasks (or you could archive them)
+                        state.tasks = state.tasks.filter(t => t.deliverableId !== id);
+
+                        // Go to Hall of Fame
+                        state.currentView = 'hallOfFame';
+                        state.selectedDeliverableId = null;
+                        closeModal();
+                        render();
+                    }
+                    break;
+                }
+            }
+        });
+
+
+        // --- INITIALIZATION ---
+        
+        render(); // Initial app load
+
+    </script>
+</body>
+</html>

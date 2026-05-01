@@ -122,5 +122,15 @@ async function openaiCompatText(o: OAIOpts): Promise<string> {
     throw new Error(`API error (${res.status}): ${err}`);
   }
   const data = await res.json();
-  return data.choices?.[0]?.message?.content || '';
+  const message = data.choices?.[0]?.message;
+  
+  let text = message?.content || '';
+  
+  // If the API returns reasoning_content, we can format it nicely using markdown quotes if it's not a JSON response.
+  if (message?.reasoning_content && !o.jsonMode) {
+    const reasoningText = message.reasoning_content.trim().split('\n').map((l: string) => `> ${l}`).join('\n');
+    text = `> **AI Reasoning:**\n${reasoningText}\n\n---\n\n${text}`;
+  }
+  
+  return text;
 }

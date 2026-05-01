@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, FileText, Settings, Trash2, Zap, PlaySquare, Menu, Bot, Download } from 'lucide-react';
+import { Upload, FileText, FileCode2, Settings, Trash2, Zap, PlaySquare, Menu, Bot, Download, Ship } from 'lucide-react';
 import { CellData, CellType, Reference, NotebookState } from './types';
 import { ModelConfig } from './providers/types';
 import { generateVisualCell, runFloodlightPlan } from './aiService';
@@ -14,6 +14,8 @@ import ReferenceViewer from './components/ReferenceViewer';
 import TemplateGallery from './components/TemplateGallery';
 import PresentationMode from './components/PresentationMode';
 import AgentChat from './components/AgentChat';
+import PrismAnalyzer from './components/PrismAnalyzer';
+import Shipper from './components/Shipper';
 
 const GEMINI_ENV_KEY = process.env.GEMINI_API_KEY || '';
 function mkId() { return Math.random().toString(36).substr(2, 9); }
@@ -84,6 +86,8 @@ export default function App() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showPrism, setShowPrism] = useState(false);
+  const [showShipper, setShowShipper] = useState(false);
   
   const [floodlightPrompt, setFloodlightPrompt] = useState('');
   const [isFloodlightRunning, setIsFloodlightRunning] = useState(false);
@@ -196,6 +200,8 @@ export default function App() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${activeNb.name} - Visual Notebook</title>
+  <!-- VISUAL_NOTEBOOK_EXPORT: Please do not delete this comment or the script tag below if you plan to import this file back into Visual Notebook. -->
+  <script id="visual-notebook-state" type="application/json">${JSON.stringify(activeNb)}</script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     ${styles}
@@ -224,6 +230,86 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportNotebook = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const name = file.name.replace(/\.[^/.]+$/, ""); 
+
+    let cells: CellData[] = [];
+    let importedReferences = activeNb.references; // fallback to current refs if not embedded
+
+    if (file.name.endsWith('.html')) {
+      const match = text.match(/<script id="visual-notebook-state" type="application\/json">([\s\S]*?)<\/script>/);
+      if (match) {
+        try {
+          const state = JSON.parse(match[1]);
+          cells = state.cells.map((c: any) => ({...c, id: mkId()}));
+          if (state.references) importedReferences = state.references.map((r: any) => ({...r, id: mkId()}));
+        } catch(e) { console.error("Failed to parse embedded state", e); }
+      }
+      
+      if (cells.length === 0) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, 'text/html');
+        doc.querySelectorAll('.custom-card, .pipeline, pre, code').forEach(el => {
+           if (el.tagName.toLowerCase() === 'pre' || el.tagName.toLowerCase() === 'code') {
+             cells.push({ id: mkId(), type: 'code', codeContent: el.textContent || '', language: 'javascript', versions: [], currentVersionIndex: -1, isEditing: false, isLoading: false });
+           } else {
+             cells.push({ id: mkId(), type: 'canvas', versions: [{ prompt: 'Imported', content: el.outerHTML, timestamp: Date.now() }], currentVersionIndex: 0, isEditing: false, isLoading: false });
+           }
+        });
+      }
+    } else if (file.name.endsWith('.ipynb')) {
+      try {
+        const ipynb = JSON.parse(text);
+        for (const cell of ipynb.cells || []) {
+          const content = Array.isArray(cell.source) ? cell.source.join('') : cell.source || '';
+          if (cell.cell_type === 'markdown') {
+            cells.push({ id: mkId(), type: 'markdown', markdownContent: content, versions: [], currentVersionIndex: -1, isEditing: false, isLoading: false });
+          } else if (cell.cell_type === 'code') {
+            cells.push({ id: mkId(), type: 'code', codeContent: content, language: 'python', versions: [], currentVersionIndex: -1, isEditing: false, isLoading: false });
+          }
+        }
+      } catch(e) { alert("Failed to parse .ipynb"); }
+    } else if (file.name.endsWith('.jl')) {
+      const parts = text.split(/# ╔═╡/);
+      if (parts.length > 1) {
+         parts.slice(1).forEach(p => {
+            const lines = p.split('\n');
+            const code = lines.slice(1).join('\n').trim();
+            if (code) {
+               if (code.startsWith('md"')) {
+                 cells.push({ id: mkId(), type: 'markdown', markdownContent: code.slice(3, -1), versions: [], currentVersionIndex: -1, isEditing: false, isLoading: false });
+               } else {
+                 cells.push({ id: mkId(), type: 'code', codeContent: code, language: 'julia', versions: [], currentVersionIndex: -1, isEditing: false, isLoading: false });
+               }
+            }
+         });
+      } else {
+         cells.push({ id: mkId(), type: 'code', codeContent: text, language: 'julia', versions: [], currentVersionIndex: -1, isEditing: false, isLoading: false });
+      }
+    } else {
+       cells.push({ id: mkId(), type: 'markdown', markdownContent: text, versions: [], currentVersionIndex: -1, isEditing: false, isLoading: false });
+    }
+
+    if (cells.length === 0) {
+      cells = [{ id: mkId(), type: 'markdown', markdownContent: "Import failed or file empty.", versions: [], currentVersionIndex: -1, isEditing: false, isLoading: false }];
+    }
+
+    const nb = createBlankNotebook(name);
+    nb.cells = cells;
+    nb.references = importedReferences;
+    saveNotebook(nb);
+    setNotebooks(getAllNotebooks());
+    setActiveNotebookId(nb.id);
+    setActiveNbId(nb.id);
+    
+    if (importInputRef.current) importInputRef.current.value = '';
+  };
+
   return (
     <div className="min-h-screen bg-[var(--bg)] flex flex-col">
       <header className="h-14 border-b border-[var(--border)] bg-[var(--bg2)] px-4 flex items-center justify-between sticky top-0 z-50 flex-shrink-0">
@@ -240,6 +326,8 @@ export default function App() {
           <div className="w-px h-5 bg-[var(--border)] hidden sm:block" />
           <button onClick={handleExportHtml} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors" title="Export HTML"><Download size={14} /> Export</button>
           <button onClick={() => setShowPresentation(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors" title="Presentation Mode"><PlaySquare size={14} /> Present</button>
+          <button onClick={() => setShowPrism(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-amber-400/70 hover:text-amber-300 transition-colors" title="PRISM Code Intelligence"><FileCode2 size={14} /> PRISM</button>
+          <button onClick={() => setShowShipper(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-blue-400/70 hover:text-blue-300 transition-colors" title="Shipper Management"><Ship size={14} /> SHIPPER</button>
           <input type="file" multiple ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
           <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors"><Upload size={14} /> Refs</button>
           <button onClick={() => setShowChat(!showChat)} className={`flex items-center gap-1.5 text-xs font-mono transition-colors ${showChat ? 'text-[var(--cyan)]' : 'text-slate-400 hover:text-white'}`} title="Agent Chat"><Bot size={14} /> Agent</button>
@@ -248,7 +336,8 @@ export default function App() {
       </header>
 
       <div className="flex flex-1 overflow-hidden relative">
-        <Sidebar notebooks={notebooks} activeId={activeNbId} onSwitch={(id) => { setActiveNbId(id); setActiveNotebookId(id); }} onCreate={handleCreateNotebook} onDelete={handleDeleteNotebook} onOpenTemplates={() => setShowTemplates(true)} isOpen={sidebarOpen} />
+        <input type="file" ref={importInputRef} onChange={handleImportNotebook} className="hidden" accept=".html,.ipynb,.jl,.txt,.md" />
+        <Sidebar notebooks={notebooks} activeId={activeNbId} onSwitch={(id) => { setActiveNbId(id); setActiveNotebookId(id); }} onCreate={handleCreateNotebook} onDelete={handleDeleteNotebook} onOpenTemplates={() => setShowTemplates(true)} onImport={() => importInputRef.current?.click()} isOpen={sidebarOpen} />
         <div className={`flex-1 flex flex-col transition-all duration-300 ${sidebarOpen ? 'ml-60' : 'ml-0'} overflow-y-auto`}>
           {activeNb.references.length > 0 && (
             <div className="w-full bg-[var(--bg2)] border-b border-[var(--border)] px-4 py-2 flex flex-wrap gap-2 items-center sticky top-0 z-40">
@@ -286,6 +375,8 @@ export default function App() {
       {showTemplates && <TemplateGallery onSelect={handleApplyTemplate} onClose={() => setShowTemplates(false)} />}
       {showRefViewer && <ReferenceViewer references={activeNb.references} onClose={() => setShowRefViewer(false)} />}
       {showPresentation && <PresentationMode cells={activeNb.cells} onClose={() => setShowPresentation(false)} />}
+      <PrismAnalyzer modelConfig={modelConfig} isOpen={showPrism} onClose={() => setShowPrism(false)} />
+      <Shipper modelConfig={modelConfig} isOpen={showShipper} onClose={() => setShowShipper(false)} />
       <AgentChat
         allCells={activeNb.cells}
         references={activeNb.references}

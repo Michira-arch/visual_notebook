@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, BookTemplate, Trash2, ChevronRight, NotebookPen } from 'lucide-react';
+import { Plus, BookTemplate, Trash2, ChevronRight, NotebookPen, Download } from 'lucide-react';
 import { NotebookState } from '../types';
 
 interface Props {
@@ -9,10 +9,11 @@ interface Props {
   onCreate: () => void;
   onDelete: (id: string) => void;
   onOpenTemplates: () => void;
+  onImport: () => void;
   isOpen: boolean;
 }
 
-export default function Sidebar({ notebooks, activeId, onSwitch, onCreate, onDelete, onOpenTemplates, isOpen }: Props) {
+export default function Sidebar({ notebooks, activeId, onSwitch, onCreate, onDelete, onOpenTemplates, onImport, isOpen }: Props) {
   const [hoverDelete, setHoverDelete] = useState<string | null>(null);
 
   return (
@@ -22,13 +23,22 @@ export default function Sidebar({ notebooks, activeId, onSwitch, onCreate, onDel
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
         <span className="font-mono text-[10px] tracking-widest text-[var(--text-dim)] uppercase">Notebooks</span>
-        <button
-          onClick={onCreate}
-          title="New Notebook"
-          className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--cyan)] hover:bg-[var(--bg)] transition-colors"
-        >
-          <Plus size={14} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onImport}
+            title="Import Notebook"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--cyan)] hover:bg-[var(--bg)] transition-colors"
+          >
+            <Download size={14} className="rotate-180" />
+          </button>
+          <button
+            onClick={onCreate}
+            title="New Notebook"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--cyan)] hover:bg-[var(--bg)] transition-colors"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Notebook list */}
@@ -50,7 +60,12 @@ export default function Sidebar({ notebooks, activeId, onSwitch, onCreate, onDel
             </span>
             {hoverDelete === nb.id && notebooks.length > 1 && (
               <button
-                onClick={e => { e.stopPropagation(); onDelete(nb.id); }}
+                onClick={e => { 
+                  e.stopPropagation(); 
+                  if (window.confirm(`Are you sure you want to delete "${nb.name}"? This action cannot be undone.`)) {
+                    onDelete(nb.id); 
+                  }
+                }}
                 className="text-[var(--text-dim)] hover:text-[var(--red)] transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
                 title="Delete notebook"
               >

@@ -132,6 +132,101 @@ export async function runFloodlightPlan(
   return items as FloodlightPlanItem[];
 }
 
+// ─── PRISM Code Analysis ────────────────────────────────────────────────────
+
+export interface CodeAnalysisResult {
+  summary: string;
+  detected_language: string;
+  natural_language: string;
+  math: string;
+  mermaid: string;
+  insights: string;
+  complexity_summary: {
+    time: string;
+    space: string;
+    dominant_operation: string;
+  };
+}
+
+const PRISM_SYSTEM_PROMPT = `You are PRISM, an elite code intelligence engine. You produce precise, thorough, publication-quality code analysis.
+Analyze the provided code and return ONLY a valid JSON object with no markdown backticks, no preamble, no trailing text.
+The JSON must have exactly these keys:
+
+"summary": One clear sentence describing what this codebase does.
+
+"detected_language": The programming language detected.
+
+"natural_language": A comprehensive markdown explanation structured with:
+- ## Overview (what the whole codebase does, its purpose and architecture)
+- ## Key Components (each major class/module/namespace, with responsibilities)
+- ## Functions & Methods (for each function: its purpose, parameters with types, return value, side effects, and how it connects to other parts)
+- ## Data Flow (how data moves through the system, entry points to outputs)
+- ## Design Patterns (any patterns observed: Observer, Strategy, Builder, etc.)
+Use **bold** for function/class names. Use \`code\` for variable names.
+
+"math": A markdown string with mathematical representation. Structure:
+- ## Formal Signatures (write each function as f: X → Y with domain/codomain)
+- ## deeper analysis follows.
+
+"mermaid": A valid Mermaid diagram string (just the raw mermaid code, no backticks). Choose the best diagram type:
+- Use classDiagram for OOP/class-heavy code
+- Use flowchart TD for procedural/functional code  
+- Use sequenceDiagram for async/event-driven code
+- Use graph TD for data pipeline/graph structures
+Include ALL major functions, classes, and relationships. Label edges with interaction types. Use descriptive node labels. Keep it clean and avoid syntax issues.
+
+"insights": A markdown string with deep code insights. Structure:
+- ## Content here
+- ## More content here
+- ## And so on
+
+"complexity_summary": An object with: { "time": "O(...)", "space": "O(...)", "dominant_operation": "..." }
+
+CRITICAL: You must escape all newlines within string values as \\n. Do not use literal newlines inside strings or the JSON will be invalid.
+Return ONLY the JSON. No backticks. No explanation.`;
+
+export async function generateCodeAnalysis(
+  code: string,
+  language: string,
+  modelConfig: ModelConfig,
+): Promise<CodeAnalysisResult> {
+  const langLabel = language === 'auto' ? 'the provided' : language;
+
+  const userPrompt = `Analyze this ${langLabel} code:\n\n\`\`\`\n${code}\n\`\`\`\n\nReturn ONLY the JSON object as specified. No backticks wrapping the response.`;
+
+  const raw = await generateText({
+    ...modelConfig,
+    systemPrompt: PRISM_SYSTEM_PROMPT,
+    userPrompt,
+    temperature: 0.3,
+  });
+
+  // Strip any accidental backticks or markdown wrappers
+  let cleaned = raw
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+
+  // Try to fix unescaped control characters within string literals
+  try {
+    cleaned = cleaned.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) => {
+      return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+    });
+  } catch (e) { /* ignore regex errors if any */ }
+
+  try {
+    return JSON.parse(cleaned) as CodeAnalysisResult;
+  } catch (e) {
+    // Try to extract JSON from the response if wrapped in text
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]) as CodeAnalysisResult;
+    }
+    throw new Error('Failed to parse analysis response. The model returned invalid JSON.');
+  }
+}
+
 const CHAT_SYSTEM_PROMPT = `You are an AI assistant integrated directly into the user's Visual Notebook.
 You can see their current notebook state (cells) and their reference files.
 Use this context to answer questions, brainstorm, or provide feedback.
@@ -144,12 +239,12 @@ Available actions:
 2. "run_floodlight": {"tool": "run_floodlight", "args": {"prompt": "floodlight prompt"}}
 
 Example:
-I can create a cell for you.
+Print 'Hello World':
 <action>
 {"tool": "create_cell", "args": {"type": "markdown", "content": "# Hello World"}}
 </action>
 
-Only output ONE action per response. Always explain what you are going to do before the action tag.`;
+Only output ONE action per response. Always explain what you are going to do before the action tag. You do not need to output an action in each response, only when necessary or asked to.`;
 
 export async function generateChatResponse(
   messages: { role: 'user' | 'assistant'; content: string }[],

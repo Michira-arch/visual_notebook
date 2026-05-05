@@ -237,6 +237,9 @@ The frontend will intercept this and ask the user for permission before executin
 Available actions:
 1. "create_cell": {"tool": "create_cell", "args": {"type": "markdown" | "code" | "canvas", "content": "markdown content, code content, or canvas prompt"}}
 2. "run_floodlight": {"tool": "run_floodlight", "args": {"prompt": "floodlight prompt"}}
+3. "take_screenshot": {"tool": "take_screenshot", "args": {}}
+4. "sandbox_execute": {"tool": "sandbox_execute", "args": {"language": "javascript" | "mermaid", "code": "code here"}} - Executes code in a background sandbox and returns the result/errors to you. Use this to verify syntax or logic before outputting to the user.
+5. "run_terminal_command": {"tool": "run_terminal_command", "args": {"command": "npm run build"}} - Runs a terminal command on the user's OS and returns the output to you. NOTE: The user MUST explicitly approve this command before it executes. Use this sparingly and cautiously to ship code or run scripts.
 
 Example:
 Print 'Hello World':
@@ -251,6 +254,7 @@ export async function generateChatResponse(
   allCells: CellData[],
   references: Reference[],
   modelConfig: ModelConfig,
+  images?: string[],
 ): Promise<string> {
   const notebookContext = buildNotebookContext(allCells);
   const refsContext = references.map(r => `Reference [${r.name}]:\n${r.content}`).join('\n\n');
@@ -266,6 +270,7 @@ export async function generateChatResponse(
     systemPrompt,
     userPrompt,
     temperature: 0.5,
+    images,
   });
 
   return result;

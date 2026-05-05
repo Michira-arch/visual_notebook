@@ -31,6 +31,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  images?: string[];
   parsedAction?: {
     tool: string;
     args: any;

@@ -16,9 +16,6 @@ export default function ModelSelector({ activeProviderId, activeModelId, onProvi
   const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newProviderId = e.target.value;
     onProviderChange(newProviderId);
-    // Reset to first model of new provider
-    const firstModel = PROVIDERS.find(p => p.id === newProviderId)?.models[0];
-    if (firstModel) onModelChange(firstModel.id);
   };
 
   return (

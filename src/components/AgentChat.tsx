@@ -1,9 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Send, Bot, User, Check, XCircle, Loader2, Plus, MessageSquare, Trash2, ChevronDown } from 'lucide-react';
+import { X, Send, Bot, User, Check, XCircle, Loader2, Plus, MessageSquare, Trash2, ChevronDown, Image as ImageIcon, Camera } from 'lucide-react';
 import { CellData, Reference, CellType, Conversation, ChatMessage } from '../types';
 import { ModelConfig } from '../providers/types';
 import { generateChatResponse } from '../aiService';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import { toPng } from 'html-to-image';
 
 interface Props {
   allCells: CellData[];
@@ -16,15 +21,19 @@ interface Props {
   conversations: Conversation[];
   activeConversationId?: string;
   onUpdateConversations: (conversations: Conversation[], activeId?: string) => void;
+  width: number;
+  onWidthChange: (width: number) => void;
 }
 
 function mkId() { return Math.random().toString(36).substr(2, 9); }
 
-export default function AgentChat({ allCells, references, modelConfig, isOpen, onClose, onAddCell, onFloodlight, conversations, activeConversationId, onUpdateConversations }: Props) {
+export default function AgentChat({ allCells, references, modelConfig, isOpen, onClose, onAddCell, onFloodlight, conversations, activeConversationId, onUpdateConversations, width, onWidthChange }: Props) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showConvList, setShowConvList] = useState(false);
+  const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fallback default message
   const defaultMessages: ChatMessage[] = [
@@ -60,6 +69,7 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
     };
     onUpdateConversations([...conversations, newConv], newConv.id);
     setShowConvList(false);
+    setAttachedImages([]);
   };
 
   const handleDeleteChat = (id: string, e: React.MouseEvent) => {
@@ -87,16 +97,27 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-    const userMsg: ChatMessage = { id: mkId(), role: 'user', content: input };
+  const handleSend = async (overrideInput?: string, overrideImages?: string[]) => {
+    const messageContent = overrideInput || input;
+    const messageImages = overrideImages || attachedImages;
+
+    if (!messageContent.trim() && messageImages.length === 0) return;
+    if (isLoading) return;
+
+    const userMsg: ChatMessage = { 
+      id: mkId(), 
+      role: 'user', 
+      content: messageContent,
+      images: messageImages.length > 0 ? messageImages : undefined 
+    };
     
     const conv = getOrCreateActiveConv();
     
     // update title if it's the first user message
     let title = conv.title;
     if (conv.messages.length <= 1 && title === 'New Conversation') {
-      title = input.slice(0, 30) + (input.length > 30 ? '...' : '');
+      title = messageContent.slice(0, 30) + (messageContent.length > 30 ? '...' : '');
+      if (!title && messageImages.length > 0) title = "Image Attachment";
     }
 
     const newMessages = [...conv.messages, userMsg];
@@ -107,25 +128,118 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
     onUpdateConversations(updatedConvs, updatedConv.id);
     
     setInput('');
+    setAttachedImages([]);
     setIsLoading(true);
 
     try {
-      const response = await generateChatResponse(newMessages.map(m => ({ role: m.role, content: m.content })), allCells, references, modelConfig);
-      const { text, action } = parseAction(response);
-      const assistantMsg: ChatMessage = { id: mkId(), role: 'assistant', content: text, parsedAction: action };
-      
-      onUpdateConversations(conversations.map(c => c.id === conv.id ? { ...updatedConv, messages: [...newMessages, assistantMsg], updatedAt: Date.now() } : c)
-        .concat(conversations.find(c => c.id === conv.id) ? [] : [{...updatedConv, messages: [...newMessages, assistantMsg]}]), updatedConv.id);
+      let currentMessages = [...newMessages];
+      let currentConv = updatedConv;
+
+      let keepGoing = true;
+      let loopCount = 0;
+
+      while (keepGoing && loopCount < 3) {
+        loopCount++;
+        setIsLoading(true);
+        const response = await generateChatResponse(
+          currentMessages.map(m => ({ role: m.role, content: m.content })), 
+          allCells, 
+          references, 
+          modelConfig,
+          loopCount === 1 ? messageImages : undefined
+        );
+        
+        const { text, action } = parseAction(response);
+        
+        if (action) {
+          if (action.tool === 'run_terminal_command') {
+            const assistantMsg: ChatMessage = { id: mkId(), role: 'assistant', content: text, parsedAction: action };
+            currentMessages = [...currentMessages, assistantMsg];
+            currentConv = { ...currentConv, messages: currentMessages, updatedAt: Date.now() };
+            onUpdateConversations(conversations.map(c => c.id === currentConv.id ? currentConv : c)
+              .concat(conversations.find(c => c.id === currentConv.id) ? [] : [currentConv]), currentConv.id);
+            keepGoing = false;
+          } else {
+            // Auto-execute the action
+            const acceptedAction = { ...action, status: 'accepted' as const };
+            const assistantMsg: ChatMessage = { id: mkId(), role: 'assistant', content: text, parsedAction: acceptedAction };
+            currentMessages = [...currentMessages, assistantMsg];
+            currentConv = { ...currentConv, messages: currentMessages, updatedAt: Date.now() };
+            onUpdateConversations(conversations.map(c => c.id === currentConv.id ? currentConv : c)
+              .concat(conversations.find(c => c.id === currentConv.id) ? [] : [currentConv]), currentConv.id);
+  
+            const { tool, args } = action;
+          
+          if (tool === 'sandbox_execute') {
+            let resultStr = '';
+            if (args.language === 'mermaid') {
+              try {
+                const mermaid = (await import('mermaid')).default;
+                const isValid = await mermaid.parse(args.code);
+                resultStr = isValid ? 'Mermaid syntax is valid.' : 'Mermaid syntax parsed but returned false.';
+              } catch(e: any) {
+                resultStr = 'Mermaid Syntax Error: ' + e.message;
+              }
+            } else if (args.language === 'javascript') {
+              try {
+                const result = new Function(args.code)();
+                resultStr = 'JavaScript executed successfully. Result: ' + (result !== undefined ? JSON.stringify(result) : 'undefined');
+              } catch(e: any) {
+                resultStr = 'JavaScript Error: ' + e.toString();
+              }
+            } else {
+              resultStr = 'Unsupported language: ' + args.language;
+            }
+            
+            const resultMsg: ChatMessage = { id: mkId(), role: 'user', content: `[Sandbox Execution Result]\n\`\`\`text\n${resultStr}\n\`\`\`` };
+            currentMessages = [...currentMessages, resultMsg];
+            currentConv = { ...currentConv, messages: currentMessages, updatedAt: Date.now() };
+            onUpdateConversations(conversations.map(c => c.id === currentConv.id ? currentConv : c)
+              .concat(conversations.find(c => c.id === currentConv.id) ? [] : [currentConv]), currentConv.id);
+            // Loop continues
+          } else {
+            // Other actions (create_cell, run_floodlight, take_screenshot)
+            if (tool === 'create_cell') {
+              onAddCell(args.type, args.content);
+            } else if (tool === 'run_floodlight') {
+              onFloodlight(args.prompt);
+            } else if (tool === 'take_screenshot') {
+              setTimeout(async () => {
+                const mainEl = document.querySelector('main');
+                if (mainEl) {
+                  try {
+                    const dataUrl = await toPng(mainEl, { backgroundColor: '#0F1115' });
+                    handleSend("Here is the screenshot you requested.", [dataUrl]);
+                  } catch (e) {
+                    console.error("Screenshot failed", e);
+                  }
+                }
+              }, 500);
+            }
+            }
+            keepGoing = false;
+          }
+        } else {
+          // No action, just text
+          const assistantMsg: ChatMessage = { id: mkId(), role: 'assistant', content: text };
+          currentMessages = [...currentMessages, assistantMsg];
+          currentConv = { ...currentConv, messages: currentMessages, updatedAt: Date.now() };
+          onUpdateConversations(conversations.map(c => c.id === currentConv.id ? currentConv : c)
+            .concat(conversations.find(c => c.id === currentConv.id) ? [] : [currentConv]), currentConv.id);
+          keepGoing = false;
+        }
+      }
     } catch (err: any) {
       const errorMsg: ChatMessage = { id: mkId(), role: 'assistant', content: `**Error:** ${err.message}` };
-      onUpdateConversations(conversations.map(c => c.id === conv.id ? { ...updatedConv, messages: [...newMessages, errorMsg], updatedAt: Date.now() } : c)
-        .concat(conversations.find(c => c.id === conv.id) ? [] : [{...updatedConv, messages: [...newMessages, errorMsg]}]), updatedConv.id);
+      const updatedMessages = activeConv ? [...activeConv.messages, errorMsg] : [...newMessages, errorMsg];
+      onUpdateConversations(conversations.map(c => c.id === conv.id ? { ...updatedConv, messages: updatedMessages, updatedAt: Date.now() } : c)
+        .concat(conversations.find(c => c.id === conv.id) ? [] : [{...updatedConv, messages: updatedMessages}]), updatedConv.id);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAction = (msgId: string, accept: boolean) => {
+  const handleAction = async (msgId: string, accept: boolean) => {
     if (!activeConv) return;
     
     const msgIdx = activeConv.messages.findIndex(m => m.id === msgId);
@@ -136,10 +250,45 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
 
     if (accept) {
       const { tool, args } = msg.parsedAction;
-      if (tool === 'create_cell') {
+      if (tool === 'run_terminal_command') {
+        try {
+          const ws = new WebSocket('ws://localhost:8765');
+          ws.onopen = () => {
+            const reqId = mkId();
+            ws.send(JSON.stringify({ type: 'agent_execute', command: args.command, id: reqId }));
+          };
+          ws.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+              if (data.type === 'agent_result') {
+                ws.close();
+                handleSend(`[Terminal Execution Result]\n\`\`\`text\n${data.output}\n\`\`\``);
+              }
+            } catch(e) {}
+          };
+          ws.onerror = () => {
+            handleSend(`[Terminal Error]\nCould not connect to WebSocket server. Is it running?`);
+          };
+        } catch(e: any) {
+          handleSend(`[Terminal Error]\n${e.message}`);
+        }
+      } else if (tool === 'create_cell') {
         onAddCell(args.type, args.content);
       } else if (tool === 'run_floodlight') {
         onFloodlight(args.prompt);
+      } else if (tool === 'take_screenshot') {
+        const mainEl = document.querySelector('main');
+        if (mainEl) {
+          try {
+            const dataUrl = await toPng(mainEl, { backgroundColor: '#0F1115' });
+            // After taking screenshot, we auto-send it back to the agent
+            setTimeout(() => {
+              handleSend("Here is the screenshot you requested.", [dataUrl]);
+            }, 500);
+          } catch (e) {
+            console.error("Screenshot failed", e);
+          }
+        }
       }
     }
 
@@ -153,23 +302,22 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
     onUpdateConversations(conversations.map(c => c.id === activeConv.id ? updatedConv : c), activeConv.id);
   };
 
-  const [width, setWidth] = useState(320);
   const isResizing = useRef(false);
 
   const startResizing = useCallback((e: React.MouseEvent) => {
     isResizing.current = true;
     document.addEventListener('mousemove', resize);
     document.addEventListener('mouseup', stopResizing);
-  }, []);
+  }, [onWidthChange]);
 
   const resize = useCallback((e: MouseEvent) => {
     if (isResizing.current) {
       const newWidth = window.innerWidth - e.clientX;
       if (newWidth > 250 && newWidth < 800) {
-        setWidth(newWidth);
+        onWidthChange(newWidth);
       }
     }
-  }, []);
+  }, [onWidthChange]);
 
   const stopResizing = useCallback(() => {
     isResizing.current = false;
@@ -177,11 +325,26 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
     document.removeEventListener('mouseup', stopResizing);
   }, [resize]);
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAttachedImages(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+    
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   if (!isOpen) return null;
 
   return (
     <div 
-      className="fixed right-0 top-14 h-[calc(100vh-3.5rem)] bg-[var(--bg2)] border-l border-[var(--border)] shadow-2xl flex flex-col z-40 transition-transform duration-300"
+      className="fixed right-0 top-14 h-[calc(100vh-3.5rem)] bg-[var(--bg2)] border-l border-[var(--border)] shadow-2xl flex flex-col z-40 transition-all duration-300"
       style={{ width: `${width}px` }}
     >
       <div 
@@ -231,8 +394,17 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
                 {m.role === 'user' ? <User size={12} /> : <Bot size={12} />}
                 <span className="text-[10px] font-mono uppercase">{m.role}</span>
               </div>
-              <div className="prose prose-invert prose-sm max-w-none">
-                <Markdown>{m.content}</Markdown>
+              
+              {m.images && m.images.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {m.images.map((img, i) => (
+                    <img key={i} src={img} alt="attachment" className="max-w-full rounded border border-[var(--border)] shadow-sm" style={{ maxHeight: '200px' }} />
+                  ))}
+                </div>
+              )}
+
+              <div className="markdown-body text-sm max-w-none">
+                <Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{m.content}</Markdown>
               </div>
             </div>
 
@@ -270,6 +442,17 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
         <div ref={endRef} />
       </div>
 
+      {attachedImages.length > 0 && (
+        <div className="px-4 py-2 border-t border-[var(--border)] bg-[var(--bg)] flex gap-2 overflow-x-auto">
+          {attachedImages.map((img, i) => (
+            <div key={i} className="relative flex-shrink-0">
+              <img src={img} className="w-12 h-12 object-cover rounded border border-[var(--cyan)]" />
+              <button onClick={() => setAttachedImages(prev => prev.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 bg-[var(--red)] text-white rounded-full p-0.5"><X size={10} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="p-3 border-t border-[var(--border)] bg-[var(--bg2)] flex-shrink-0" onClick={() => setShowConvList(false)}>
         <div className="relative">
           <textarea
@@ -282,15 +465,38 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
               }
             }}
             placeholder="Ask or command the agent..."
-            className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg py-2 pl-3 pr-10 text-sm text-white placeholder-[var(--text-dim)] focus:outline-none focus:border-[var(--cyan)] resize-none h-14"
+            className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg py-2 pl-3 pr-20 text-sm text-white placeholder-[var(--text-dim)] focus:outline-none focus:border-[var(--cyan)] resize-none h-14"
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading}
-            className="absolute right-2 bottom-2 p-1.5 text-[var(--cyan)] hover:bg-[var(--cyan)]/20 rounded disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
-          >
-            <Send size={16} />
-          </button>
+          <div className="absolute right-2 bottom-2 flex items-center gap-1">
+            <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" multiple />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 text-[var(--text-dim)] hover:text-[var(--cyan)] hover:bg-[var(--cyan)]/20 rounded transition-colors"
+              title="Attach Images"
+            >
+              <ImageIcon size={16} />
+            </button>
+            <button
+              onClick={async () => {
+                const mainEl = document.querySelector('main');
+                if (mainEl) {
+                  const dataUrl = await toPng(mainEl, { backgroundColor: '#0F1115' });
+                  setAttachedImages(prev => [...prev, dataUrl]);
+                }
+              }}
+              className="p-1.5 text-[var(--text-dim)] hover:text-[var(--cyan)] hover:bg-[var(--cyan)]/20 rounded transition-colors"
+              title="Take Screenshot"
+            >
+              <Camera size={16} />
+            </button>
+            <button
+              onClick={() => handleSend()}
+              disabled={(!input.trim() && attachedImages.length === 0) || isLoading}
+              className="p-1.5 text-[var(--cyan)] hover:bg-[var(--cyan)]/20 rounded disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+            >
+              <Send size={16} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

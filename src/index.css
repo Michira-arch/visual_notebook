@@ -304,6 +304,22 @@
     color: var(--text-dim);
     font-style: italic;
   }
+
+  .markdown-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+    border: 1px solid var(--border);
+  }
+  .markdown-body th, .markdown-body td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+  }
+  .markdown-body th {
+    background: var(--bg2);
+    color: #fff;
+  }
   
   /* ── State diagram ── */
   .state-diagram { margin: 24px 0; overflow-x: auto; }

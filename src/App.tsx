@@ -16,6 +16,8 @@ import PresentationMode from './components/PresentationMode';
 import AgentChat from './components/AgentChat';
 import PrismAnalyzer from './components/PrismAnalyzer';
 import Shipper from './components/Shipper';
+import TerminalManager from './components/TerminalManager';
+import { Terminal as TerminalIcon } from 'lucide-react';
 
 const GEMINI_ENV_KEY = process.env.GEMINI_API_KEY || '';
 function mkId() { return Math.random().toString(36).substr(2, 9); }
@@ -72,7 +74,16 @@ export default function App() {
   };
 
   const [activeProviderId, setActiveProviderId] = useState(() => getActiveProvider());
-  const [activeModelId, setActiveModelId] = useState(() => getActiveModel(getActiveProvider()));
+  const [activeModelId, setActiveModelId] = useState(() => {
+    const pid = getActiveProvider();
+    let mid = getActiveModel(pid);
+    const provider = PROVIDERS.find(p => p.id === pid);
+    if (provider && !provider.models.find(m => m.id === mid)) {
+      mid = provider.models[0].id;
+      setActiveModel(pid, mid);
+    }
+    return mid;
+  });
   const modelConfig: ModelConfig = { providerId: activeProviderId, modelId: activeModelId };
 
   const [editingName, setEditingName] = useState(false);
@@ -88,11 +99,23 @@ export default function App() {
   const [showChat, setShowChat] = useState(false);
   const [showPrism, setShowPrism] = useState(false);
   const [showShipper, setShowShipper] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [chatWidth, setChatWidth] = useState(320);
   
   const [floodlightPrompt, setFloodlightPrompt] = useState('');
   const [isFloodlightRunning, setIsFloodlightRunning] = useState(false);
 
-  const handleProviderChange = (pid: string) => { setActiveProvider(pid); setActiveProviderId(pid); const mid = getActiveModel(pid); setActiveModelId(mid); };
+  const handleProviderChange = (pid: string) => { 
+    setActiveProvider(pid); 
+    setActiveProviderId(pid); 
+    let mid = getActiveModel(pid); 
+    const provider = PROVIDERS.find(p => p.id === pid);
+    if (provider && !provider.models.find(m => m.id === mid)) {
+      mid = provider.models[0].id;
+      setActiveModel(pid, mid);
+    }
+    setActiveModelId(mid); 
+  };
   const handleModelChange = (mid: string) => { setActiveModel(activeProviderId, mid); setActiveModelId(mid); };
 
   const addCell = useCallback((type: CellType = 'canvas') => {
@@ -111,11 +134,12 @@ export default function App() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const executeFloodlight = async () => {
-    if (!floodlightPrompt.trim() || isFloodlightRunning) return;
+  const executeFloodlight = async (promptOverride?: string) => {
+    const promptToUse = promptOverride || floodlightPrompt;
+    if (!promptToUse.trim() || isFloodlightRunning) return;
     setIsFloodlightRunning(true);
     try {
-      const plan = await runFloodlightPlan(floodlightPrompt, activeNb.cells, activeNb.references, modelConfig);
+      const plan = await runFloodlightPlan(promptToUse, activeNb.cells, activeNb.references, modelConfig);
       let newCells = [...activeNb.cells];
       for (const item of plan) {
         const id = mkId();
@@ -123,11 +147,19 @@ export default function App() {
         newCells.push(nc);
         setCells([...newCells]);
         if (item.type === 'canvas') {
-          const html = await generateVisualCell(item.content, [], newCells, activeNb.references, modelConfig);
-          const idx = newCells.findIndex(c => c.id === id);
-          if (idx > -1) {
-            newCells[idx] = { ...newCells[idx], isLoading: false, versions: [{ prompt: item.content, content: html, timestamp: Date.now() }], currentVersionIndex: 0 };
-            setCells([...newCells]);
+          try {
+            const html = await generateVisualCell(item.content, [], newCells, activeNb.references, modelConfig);
+            const idx = newCells.findIndex(c => c.id === id);
+            if (idx > -1) {
+              newCells[idx] = { ...newCells[idx], isLoading: false, versions: [{ prompt: item.content, content: html, timestamp: Date.now() }], currentVersionIndex: 0 };
+              setCells([...newCells]);
+            }
+          } catch (e) {
+            const idx = newCells.findIndex(c => c.id === id);
+            if (idx > -1) {
+              newCells[idx] = { ...newCells[idx], isLoading: false, versions: [{ prompt: item.content, content: '<div class="custom-card red"><div class="custom-card-title">Error</div><p>Failed to generate content</p></div>', timestamp: Date.now() }], currentVersionIndex: 0 };
+              setCells([...newCells]);
+            }
           }
         }
       }
@@ -326,6 +358,7 @@ export default function App() {
           <div className="w-px h-5 bg-[var(--border)] hidden sm:block" />
           <button onClick={handleExportHtml} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors" title="Export HTML"><Download size={14} /> Export</button>
           <button onClick={() => setShowPresentation(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors" title="Presentation Mode"><PlaySquare size={14} /> Present</button>
+          <button onClick={() => setShowTerminal(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-cyan-400/70 hover:text-cyan-300 transition-colors" title="System Terminal"><TerminalIcon size={14} /> TERMINAL</button>
           <button onClick={() => setShowPrism(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-amber-400/70 hover:text-amber-300 transition-colors" title="PRISM Code Intelligence"><FileCode2 size={14} /> PRISM</button>
           <button onClick={() => setShowShipper(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-blue-400/70 hover:text-blue-300 transition-colors" title="Shipper Management"><Ship size={14} /> SHIPPER</button>
           <input type="file" multiple ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
@@ -338,7 +371,13 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden relative">
         <input type="file" ref={importInputRef} onChange={handleImportNotebook} className="hidden" accept=".html,.ipynb,.jl,.txt,.md" />
         <Sidebar notebooks={notebooks} activeId={activeNbId} onSwitch={(id) => { setActiveNbId(id); setActiveNotebookId(id); }} onCreate={handleCreateNotebook} onDelete={handleDeleteNotebook} onOpenTemplates={() => setShowTemplates(true)} onImport={() => importInputRef.current?.click()} isOpen={sidebarOpen} />
-        <div className={`flex-1 flex flex-col transition-all duration-300 ${sidebarOpen ? 'ml-60' : 'ml-0'} overflow-y-auto`}>
+        <div 
+          className="flex-1 flex flex-col transition-all duration-300 overflow-y-auto"
+          style={{ 
+            marginLeft: sidebarOpen ? '15rem' : '0',
+            marginRight: showChat ? `${chatWidth}px` : '0'
+          }}
+        >
           {activeNb.references.length > 0 && (
             <div className="w-full bg-[var(--bg2)] border-b border-[var(--border)] px-4 py-2 flex flex-wrap gap-2 items-center sticky top-0 z-40">
               <span className="text-xs font-mono text-[var(--text-dim)] uppercase tracking-widest mr-2">Refs:</span>
@@ -366,7 +405,7 @@ export default function App() {
             <textarea value={floodlightPrompt} onChange={e => setFloodlightPrompt(e.target.value)} placeholder="Describe the overarching project or sweeping changes..." className="w-full h-32 bg-[var(--bg)] border border-[var(--border)] rounded p-4 text-white placeholder-[var(--text-dim)] outline-none focus:border-[var(--orange)] transition-colors resize-none mb-5" />
             <div className="flex items-center justify-end gap-3">
               <button onClick={() => setShowFloodlight(false)} disabled={isFloodlightRunning} className="px-4 py-2 rounded text-sm text-[var(--text-dim)] hover:text-white transition-colors">Cancel</button>
-              <button onClick={executeFloodlight} disabled={!floodlightPrompt.trim() || isFloodlightRunning} className="px-6 py-2 bg-[var(--orange)] text-orange-950 font-bold rounded hover:bg-orange-400 disabled:opacity-50 transition-colors flex items-center gap-2">{isFloodlightRunning ? <span className="animate-spin text-xl leading-none">⟳</span> : 'Run Floodlight'}</button>
+              <button onClick={() => executeFloodlight()} disabled={!floodlightPrompt.trim() || isFloodlightRunning} className="px-6 py-2 bg-[var(--orange)] text-orange-950 font-bold rounded hover:bg-orange-400 disabled:opacity-50 transition-colors flex items-center gap-2">{isFloodlightRunning ? <span className="animate-spin text-xl leading-none">⟳</span> : 'Run Floodlight'}</button>
             </div>
           </div>
         </div>
@@ -375,6 +414,7 @@ export default function App() {
       {showTemplates && <TemplateGallery onSelect={handleApplyTemplate} onClose={() => setShowTemplates(false)} />}
       {showRefViewer && <ReferenceViewer references={activeNb.references} onClose={() => setShowRefViewer(false)} />}
       {showPresentation && <PresentationMode cells={activeNb.cells} onClose={() => setShowPresentation(false)} />}
+      <TerminalManager isOpen={showTerminal} onClose={() => setShowTerminal(false)} />
       <PrismAnalyzer modelConfig={modelConfig} isOpen={showPrism} onClose={() => setShowPrism(false)} />
       <Shipper modelConfig={modelConfig} isOpen={showShipper} onClose={() => setShowShipper(false)} />
       <AgentChat
@@ -383,6 +423,8 @@ export default function App() {
         modelConfig={modelConfig}
         isOpen={showChat}
         onClose={() => setShowChat(false)}
+        width={chatWidth}
+        onWidthChange={setChatWidth}
         conversations={activeNb.conversations || []}
         activeConversationId={activeNb.activeConversationId}
         onUpdateConversations={(convs, activeId) => {
@@ -395,20 +437,25 @@ export default function App() {
             return nextAll;
           });
         }}
-        onAddCell={(type, content) => {
+        onAddCell={async (type, content) => {
           const id = addCell(type);
           if (type === 'markdown') {
             updateCell(id, { markdownContent: content, isEditing: false });
           } else if (type === 'code') {
-            updateCell(id, { codeContent: content, language: 'javascript' }); // Assuming JS by default or parse it if needed
+            updateCell(id, { codeContent: content, language: 'javascript' });
           } else {
-            // For canvas, content is the prompt
-            updateCell(id, { versions: [{ prompt: content, content: '<div class="custom-card"><div class="custom-card-title">Pending</div><p>Click Run to generate</p></div>', timestamp: Date.now() }], currentVersionIndex: 0 });
+            // For canvas, content is the prompt - TRIGGER AUTO GENERATION
+            updateCell(id, { isLoading: true, versions: [{ prompt: content, content: '', timestamp: Date.now() }], currentVersionIndex: 0 });
+            try {
+              const html = await generateVisualCell(content, [], activeNb.cells, activeNb.references, modelConfig);
+              updateCell(id, { isLoading: false, versions: [{ prompt: content, content: html, timestamp: Date.now() }] });
+            } catch (e) {
+              updateCell(id, { isLoading: false, versions: [{ prompt: content, content: '<div class="custom-card red"><div class="custom-card-title">Error</div><p>Failed to generate content</p></div>', timestamp: Date.now() }] });
+            }
           }
         }}
         onFloodlight={(prompt) => {
-          setFloodlightPrompt(prompt);
-          setShowFloodlight(true);
+          executeFloodlight(prompt);
         }}
       />
     </div>

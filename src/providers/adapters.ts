@@ -6,21 +6,22 @@ export interface GenerateParams extends ModelConfig {
   systemPrompt: string;
   userPrompt: string;
   temperature?: number;
+  images?: string[]; // base64 strings
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
 
 export async function generateText(params: GenerateParams): Promise<string> {
-  const { providerId, modelId, systemPrompt, userPrompt, temperature = 0.4 } = params;
+  const { providerId, modelId, systemPrompt, userPrompt, temperature = 0.4, images = [] } = params;
   const apiKey = getApiKey(providerId);
   if (!apiKey) throw new Error(`No API key configured for provider: ${providerId}`);
 
   if (providerId === 'gemini') {
-    return geminiText({ apiKey, modelId, systemPrompt, userPrompt, temperature });
+    return geminiText({ apiKey, modelId, systemPrompt, userPrompt, temperature, images });
   }
   const provider = PROVIDERS.find(p => p.id === providerId);
   if (!provider?.baseUrl) throw new Error(`Unknown provider: ${providerId}`);
-  return openaiCompatText({ baseUrl: provider.baseUrl, apiKey, modelId, systemPrompt, userPrompt, temperature });
+  return openaiCompatText({ baseUrl: provider.baseUrl, apiKey, modelId, systemPrompt, userPrompt, temperature, images });
 }
 
 export interface FloodlightItem {
@@ -56,12 +57,20 @@ export async function generateFloodlightPlan(params: GenerateParams): Promise<Fl
 
 interface GeminiOpts {
   apiKey: string; modelId: string; systemPrompt: string; userPrompt: string; temperature: number;
+  images?: string[];
 }
 
 async function geminiText(o: GeminiOpts): Promise<string> {
   const ai = new GoogleGenAI({ apiKey: o.apiKey });
+  const parts: any[] = [{ text: o.userPrompt }];
+  if (o.images) {
+    o.images.forEach(img => {
+      const base64Data = img.includes('base64,') ? img.split('base64,')[1] : img;
+      parts.push({ inlineData: { data: base64Data, mimeType: 'image/png' } });
+    });
+  }
   const res = await ai.models.generateContent({
-    model: o.modelId, contents: o.userPrompt,
+    model: o.modelId, contents: [{ role: 'user', parts }],
     config: { systemInstruction: o.systemPrompt, temperature: o.temperature },
   });
   return res.text || '';
@@ -98,14 +107,23 @@ interface OAIOpts {
   baseUrl: string; apiKey: string; modelId: string;
   systemPrompt: string; userPrompt: string; temperature: number;
   jsonMode?: boolean;
+  images?: string[];
 }
 
 async function openaiCompatText(o: OAIOpts): Promise<string> {
+  const userContent: any[] = [{ type: 'text', text: o.userPrompt }];
+  if (o.images) {
+    o.images.forEach(img => {
+      const url = img.startsWith('data:') ? img : `data:image/png;base64,${img}`;
+      userContent.push({ type: 'image_url', image_url: { url } });
+    });
+  }
+
   const body: Record<string, unknown> = {
     model: o.modelId,
     messages: [
       { role: 'system', content: o.systemPrompt },
-      { role: 'user', content: o.userPrompt },
+      { role: 'user', content: userContent },
     ],
     temperature: o.temperature,
   };

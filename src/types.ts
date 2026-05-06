@@ -25,6 +25,7 @@ export interface CellData {
   // code cells
   codeContent?: string;
   language?: string;
+  isCollapsed?: boolean;
 }
 
 export interface ChatMessage {

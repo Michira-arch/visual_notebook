@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import threading
+import signal
 
 connected_clients = set()
 
@@ -46,8 +47,14 @@ class TerminalSession:
 
     def write_input(self, data):
         if self.process and self.process.stdin:
-            self.process.stdin.write(data.encode('utf-8'))
-            self.process.stdin.flush()
+            if data == '\x03': # Ctrl+C
+                if os.name == 'nt':
+                    self.process.send_signal(signal.CTRL_C_EVENT)
+                else:
+                    self.process.send_signal(signal.SIGINT)
+            else:
+                self.process.stdin.write(data.encode('utf-8'))
+                self.process.stdin.flush()
 
     def terminate(self):
         if self.process:

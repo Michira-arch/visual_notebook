@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, FileText, FileCode2, Settings, Trash2, Zap, PlaySquare, Menu, Bot, Download, Ship } from 'lucide-react';
+import { Upload, FileText, FileCode2, Settings, Trash2, Zap, PlaySquare, Menu, Bot, Download, Ship, Maximize2, Minimize2 } from 'lucide-react';
 import { CellData, CellType, Reference, NotebookState } from './types';
 import { ModelConfig } from './providers/types';
 import { generateVisualCell, runFloodlightPlan } from './aiService';
@@ -350,7 +350,25 @@ export default function App() {
           <div className="w-8 h-8 bg-cyan-500 rounded flex items-center justify-center"><div className="w-4 h-4 border-2 border-white rotate-45" /></div>
           {editingName
             ? <input ref={nameInputRef} autoFocus value={activeNb.name} onChange={e => setNotebookName(e.target.value)} onBlur={() => setEditingName(false)} onKeyDown={e => { if (e.key === 'Enter') setEditingName(false); }} className="bg-transparent border-b border-[var(--cyan)] outline-none text-white text-sm font-semibold tracking-wide w-48" />
-            : <h1 onClick={() => setEditingName(true)} className="text-sm font-semibold tracking-wide text-white hover:text-[var(--cyan)] cursor-text transition-colors truncate max-w-[200px]" title="Click to rename">{activeNb.name}</h1>
+            : <div className="flex items-center gap-4">
+                <h1 onClick={() => setEditingName(true)} className="text-sm font-semibold tracking-wide text-white hover:text-[var(--cyan)] cursor-text transition-colors truncate max-w-[200px]" title="Click to rename">{activeNb.name}</h1>
+                <div className="flex items-center gap-1 border-l border-[var(--border)] pl-4 ml-2">
+                  <button 
+                    onClick={() => setCells(cells => cells.map(c => ({ ...c, isCollapsed: true })))}
+                    className="text-[10px] font-mono text-[var(--text-dim)] hover:text-white transition-colors flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/5"
+                    title="Collapse All"
+                  >
+                    <Minimize2 size={10} /> COLLAPSE
+                  </button>
+                  <button 
+                    onClick={() => setCells(cells => cells.map(c => ({ ...c, isCollapsed: false })))}
+                    className="text-[10px] font-mono text-[var(--text-dim)] hover:text-white transition-colors flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/5"
+                    title="Expand All"
+                  >
+                    <Maximize2 size={10} /> EXPAND
+                  </button>
+                </div>
+              </div>
           }
         </div>
         <div className="flex gap-3 items-center">

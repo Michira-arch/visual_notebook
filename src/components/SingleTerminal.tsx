@@ -33,6 +33,7 @@ export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive }
       theme: { background: '#0F1115', foreground: '#cbd5e1', cursor: '#06b6d4' },
       fontFamily: 'JetBrains Mono, monospace',
       fontSize: 13,
+      cursorBlink: true,
     });
     
     const fitAddon = new FitAddon();
@@ -64,9 +65,12 @@ export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive }
       if (ws.readyState === WebSocket.OPEN) {
         // xterm sends \r on Enter. Powershell over a pipe needs \r\n to echo a newline properly
         // so it doesn't overwrite the same line.
+        // We also map \x7f (Backspace) to \x08 (BS) for PowerShell compatibility over pipes.
         let inputData = data;
         if (data === '\r') {
           inputData = '\r\n';
+        } else if (data === '\x7f') {
+          inputData = '\x08';
         }
         ws.send(JSON.stringify({ type: 'input', data: inputData }));
       }

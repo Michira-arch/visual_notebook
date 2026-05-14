@@ -53,17 +53,18 @@ export default function TerminalManager({ isOpen, onClose }: Props) {
     });
   };
 
-  if (viewState === 'closed') return null;
-
+  // If viewState === 'closed', we just hide the entire container, but we do NOT unmount.
+  // Unmounting would kill the background processes.
   const isMaximized = viewState === 'maximized';
   const isMinimized = viewState === 'minimized';
+  const isClosed = viewState === 'closed';
   
   const containerClasses = isMaximized 
     ? "fixed inset-2 z-[60] bg-[var(--bg2)] border border-[var(--border)] shadow-2xl flex flex-col rounded-lg"
     : "fixed bottom-0 right-8 z-[60] w-[800px] h-[400px] bg-[var(--bg2)] border border-[var(--border)] border-b-0 shadow-2xl flex flex-col rounded-t-lg";
 
   return (
-    <>
+    <div style={{ display: isClosed ? 'none' : 'block' }}>
       {isMinimized && (
         <div 
           className="fixed bottom-0 right-8 z-[60] bg-[var(--bg2)] border border-[var(--border)] border-b-0 rounded-t-lg shadow-2xl flex items-center px-4 py-2 cursor-pointer hover:bg-[var(--bg)] transition-colors"
@@ -130,6 +131,6 @@ export default function TerminalManager({ isOpen, onClose }: Props) {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }

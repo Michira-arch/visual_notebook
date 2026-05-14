@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
 import { PROVIDERS } from '../providers/registry';
 import { getProviderConfigs, setProviderConfigs } from '../providers/registry';
+import { wsUrl } from '../serverClient';
 
 interface Props {
   onClose: () => void;
@@ -12,6 +13,38 @@ export default function SettingsModal({ onClose, geminiEnvKey }: Props) {
   const [configs, setConfigs] = useState<Record<string, string>>({});
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
+  const [waStatus, setWaStatus] = useState<'disconnected' | 'qr' | 'connected'>('disconnected');
+  const [waQr, setWaQr] = useState<string>('');
+
+  useEffect(() => {
+    let ws: WebSocket;
+    const connectWa = () => {
+      try {
+        ws = new WebSocket(wsUrl());
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: 'request_whatsapp_status' }));
+        };
+        ws.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'whatsapp_qr') {
+              setWaStatus('qr');
+              setWaQr(data.data);
+            } else if (data.type === 'whatsapp_connected') {
+              setWaStatus('connected');
+            } else if (data.type === 'whatsapp_disconnected') {
+              setWaStatus('disconnected');
+              setWaQr('');
+            }
+          } catch (err) {}
+        };
+      } catch (e) {}
+    };
+    connectWa();
+    return () => {
+      if (ws) ws.close();
+    };
+  }, []);
 
   useEffect(() => {
     const stored = getProviderConfigs();
@@ -98,6 +131,36 @@ export default function SettingsModal({ onClose, geminiEnvKey }: Props) {
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-[var(--border)]">
+          <h3 className="text-white font-semibold text-sm tracking-tight mb-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500"></span>
+            WhatsApp Integration
+          </h3>
+          <p className="text-xs text-[var(--text-dim)] mb-4 font-mono">
+            Connect your WhatsApp to allow the agent to send and receive messages proactively.
+          </p>
+          <div className="bg-[var(--bg)] border border-[var(--border)] rounded p-4 flex flex-col items-center justify-center min-h-[150px]">
+            {waStatus === 'connected' ? (
+              <div className="flex flex-col items-center text-green-500">
+                <CheckCircle size={32} className="mb-2" />
+                <span className="font-mono text-sm font-semibold">WhatsApp Connected</span>
+                <span className="text-xs text-[var(--text-dim)] mt-1 text-center">The agent can now interact with you via WhatsApp.</span>
+              </div>
+            ) : waStatus === 'qr' && waQr ? (
+              <div className="flex flex-col items-center">
+                <img src={waQr} alt="WhatsApp QR Code" className="w-48 h-48 border-4 border-white rounded bg-white" />
+                <span className="text-xs text-[var(--text-dim)] font-mono mt-3">Scan with WhatsApp to link device</span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center text-[var(--text-dim)]">
+                <AlertCircle size={24} className="mb-2 opacity-50" />
+                <span className="text-xs font-mono">WhatsApp service is offline or starting...</span>
+                <span className="text-[10px] opacity-70 mt-1">Make sure whatsapp_service.js is running.</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="mt-6 flex items-center justify-between">

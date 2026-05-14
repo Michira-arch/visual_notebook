@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { wsUrl } from '../serverClient';
 
 interface Props {
   isActive: boolean;
@@ -45,7 +46,7 @@ export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive }
 
     if (isActive) fitAddon.fit();
 
-    const ws = new WebSocket('ws://localhost:8765');
+    const ws = new WebSocket(wsUrl());
     wsRef.current = ws;
 
     ws.onopen = () => term.writeln('\x1b[36mConnected to Python Terminal Server\x1b[0m');
@@ -56,6 +57,8 @@ export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive }
           let text = data.data;
           if (text.includes('\n') && !text.includes('\r\n')) text = text.replace(/\n/g, '\r\n');
           term.write(text);
+        } else if (data.type === 'exit') {
+          term.writeln('\r\n\x1b[33mProcess exited.\x1b[0m');
         }
       } catch (e) {}
     };
@@ -63,15 +66,17 @@ export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive }
     
     term.onData(data => {
       if (ws.readyState === WebSocket.OPEN) {
-        // xterm sends \r on Enter. Powershell over a pipe needs \r\n to echo a newline properly
-        // so it doesn't overwrite the same line.
-        // We also map \x7f (Backspace) to \x08 (BS) for PowerShell compatibility over pipes.
+        // xterm sends \r on Enter. Powershell over a pipe needs \r\n to echo
+        // a newline properly so it doesn't overwrite the same line.
         let inputData = data;
         if (data === '\r') {
           inputData = '\r\n';
         } else if (data === '\x7f') {
+          // xterm sends \x7f for backspace on most platforms.
+          // PowerShell over pipes understands \x08 (BS).
           inputData = '\x08';
         }
+        // Ctrl+C is \x03 — send it directly, the backend handles it
         ws.send(JSON.stringify({ type: 'input', data: inputData }));
       }
     });
@@ -83,6 +88,10 @@ export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive }
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      // Tell the server to terminate the terminal process before closing
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'terminate' }));
+      }
       ws.close();
       term.dispose();
     };

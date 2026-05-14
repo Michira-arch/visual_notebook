@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { CellData } from '../types';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import MermaidChart from './MermaidChart';
 
 interface Props {
@@ -64,7 +67,7 @@ export default function PresentationMode({ cells, onClose }: Props) {
         <div className="w-full max-w-4xl">
           {cell.type === 'markdown' && (
             <div className="markdown-body prose prose-invert max-w-none text-lg leading-relaxed">
-              <Markdown>{cell.markdownContent || ''}</Markdown>
+              <Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{cell.markdownContent || ''}</Markdown>
             </div>
           )}
           {cell.type === 'canvas' && cur && (

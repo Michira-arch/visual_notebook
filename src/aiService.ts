@@ -71,7 +71,7 @@ If using mermaid, use simple layouts. The frontend is configured with a dark the
 
 const FLOODLIGHT_SYSTEM_PROMPT = `You are an AI architect creating a multi-cell project plan.
 Break the task down into 2-5 individual cells to kickstart or modify this project.
-For markdown cells, provide the actual explanatory text.
+For markdown cells, provide the actual explanatory text. Use LaTeX ($ for inline, $$ for block) for any mathematical formulas.
 For canvas cells, provide a highly detailed PROMPT that will be used by another AI to generate the HTML/Mermaid diagram.`;
 
 function buildNotebookContext(allCells: CellData[]): string {
@@ -167,6 +167,7 @@ Use **bold** for function/class names. Use \`code\` for variable names.
 "math": A markdown string with mathematical representation. Structure:
 - ## Formal Signatures (write each function as f: X → Y with domain/codomain)
 - ## deeper analysis follows.
+Use LaTeX for all mathematical notation, wrapped in $ for inline and $$ for block equations.
 
 "mermaid": A valid Mermaid diagram string (just the raw mermaid code, no backticks). Choose the best diagram type:
 - Use classDiagram for OOP/class-heavy code
@@ -240,6 +241,7 @@ Available actions:
 3. "take_screenshot": {"tool": "take_screenshot", "args": {}}
 4. "sandbox_execute": {"tool": "sandbox_execute", "args": {"language": "javascript" | "mermaid", "code": "code here"}} - Executes code in a background sandbox and returns the result/errors to you. Use this to verify syntax or logic before outputting to the user.
 5. "run_terminal_command": {"tool": "run_terminal_command", "args": {"command": "npm run build"}} - Runs a terminal command on the user's OS and returns the output to you. NOTE: The user MUST explicitly approve this command before it executes. Use this sparingly and cautiously to ship code or run scripts.
+6. "send_whatsapp_message": {"tool": "send_whatsapp_message", "args": {"number": "exact_id_here", "message": "message body"}} - Send a message to a connected WhatsApp number. VERY IMPORTANT: You MUST use the exact ID provided in the incoming message, including any suffix like '@lid' or '@s.whatsapp.net'. Do not strip the suffix. Write your entire response in the action tag, because any content outside the action tag will not be seen by the user.
 
 Example:
 Print 'Hello World':
@@ -247,7 +249,9 @@ Print 'Hello World':
 {"tool": "create_cell", "args": {"type": "markdown", "content": "# Hello World"}}
 </action>
 
-Only output ONE action per response. Always explain what you are going to do before the action tag. You do not need to output an action in each response, only when necessary or asked to.`;
+Only output ONE action per response. Always explain what you are going to do before the action tag. You do not need to output an action in each response, only when necessary or asked to.
+
+When providing mathematical explanations or formulas, ALWAYS use LaTeX notation wrapped in $ for inline math and $$ for block math (e.g., $E=mc^2$ or $$\sum_{i=0}^n i$$).`;
 
 export async function generateChatResponse(
   messages: { role: 'user' | 'assistant'; content: string }[],

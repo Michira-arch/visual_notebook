@@ -5,10 +5,16 @@ import { ModelConfig } from '../providers/types';
 import { generateVisualCell } from '../aiService';
 import mermaid from 'mermaid';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import MermaidChart from './MermaidChart';
 import CodeCell from './CodeCell';
 
-export default function CellComponent({ cell, allCells, references, modelConfig, onUpdate, onRemove }: {
+const remarkPlugins = [remarkGfm, remarkMath];
+const rehypePlugins = [rehypeKatex];
+
+export default React.memo(function CellComponent({ cell, allCells, references, modelConfig, onUpdate, onRemove }: {
   cell: CellData; allCells: CellData[]; references: Reference[];
   modelConfig: ModelConfig;
   onUpdate: (id: string, d: Partial<CellData>) => void;
@@ -116,7 +122,7 @@ export default function CellComponent({ cell, allCells, references, modelConfig,
                   </div>
                 </div>
               )
-              : <div className="markdown-body prose prose-invert max-w-none text-sm" onClick={() => onUpdate(cell.id, { isEditing: true })}><Markdown>{cell.markdownContent || '*Empty markdown cell*'}</Markdown></div>
+              : <div className="markdown-body prose prose-invert max-w-none text-sm" onClick={() => onUpdate(cell.id, { isEditing: true })}><Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins as any}>{cell.markdownContent || '*Empty markdown cell*'}</Markdown></div>
             }
           </div>
         )}
@@ -177,4 +183,4 @@ export default function CellComponent({ cell, allCells, references, modelConfig,
       )}
     </div>
   );
-}
+});

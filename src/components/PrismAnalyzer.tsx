@@ -4,6 +4,9 @@ import { ModelConfig } from '../providers/types';
 import { generateCodeAnalysis, CodeAnalysisResult } from '../aiService';
 import MermaidChart from './MermaidChart';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 const LANGUAGES = [
   'auto', 'javascript', 'typescript', 'python', 'rust', 'go', 'java', 'c++',
@@ -416,7 +419,7 @@ function NLPane({ result, onCopy, copied }: { result: CodeAnalysisResult; onCopy
 
       {result.natural_language && (
         <div className="md-render">
-          <ReactMarkdown>{result.natural_language}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{result.natural_language}</ReactMarkdown>
         </div>
       )}
 
@@ -432,7 +435,7 @@ function MathPane({ result, onCopy, copied }: { result: CodeAnalysisResult; onCo
     <div>
       {result.math && (
         <div className="md-render math-render">
-          <ReactMarkdown>{result.math}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{result.math}</ReactMarkdown>
         </div>
       )}
 
@@ -500,7 +503,7 @@ function InsightsPane({ result, onCopy, copied }: { result: CodeAnalysisResult; 
       </div>
 
       <div className="md-render">
-        <ReactMarkdown>{result.insights}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{result.insights}</ReactMarkdown>
       </div>
 
       <div className="mt-6 pt-4 border-t border-white/[0.07] flex justify-end">

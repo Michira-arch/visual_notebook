@@ -7,8 +7,8 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { toPng } from 'html-to-image';
+import { wsUrl } from '../serverClient';
 
 interface Props {
   allCells: CellData[];
@@ -27,13 +27,14 @@ interface Props {
 
 function mkId() { return Math.random().toString(36).substr(2, 9); }
 
-export default function AgentChat({ allCells, references, modelConfig, isOpen, onClose, onAddCell, onFloodlight, conversations, activeConversationId, onUpdateConversations, width, onWidthChange }: Props) {
+export default React.memo(function AgentChat({ allCells, references, modelConfig, isOpen, onClose, onAddCell, onFloodlight, conversations, activeConversationId, onUpdateConversations, width, onWidthChange }: Props) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showConvList, setShowConvList] = useState(false);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const persistentWsRef = useRef<WebSocket | null>(null);
 
   // Fallback default message
   const defaultMessages: ChatMessage[] = [
@@ -46,6 +47,56 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isOpen]);
+
+  // Persistent WebSocket for incoming WhatsApp messages + outgoing sends
+  useEffect(() => {
+    let ws: WebSocket;
+    let reconnectTimer: NodeJS.Timeout;
+
+    const connect = () => {
+      ws = new WebSocket(wsUrl());
+      ws.onopen = () => {
+        persistentWsRef.current = ws;
+      };
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'whatsapp_message') {
+            const displayName = data.name && data.name !== 'Unknown' ? data.name : data.number;
+            const incomingText = `[WhatsApp from ${displayName} (${data.number})]: ${data.data}`;
+            window.dispatchEvent(new CustomEvent('incoming_whatsapp', { detail: incomingText }));
+          }
+        } catch (e) {}
+      };
+      ws.onclose = () => {
+        persistentWsRef.current = null;
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimer);
+      persistentWsRef.current = null;
+      if (ws) ws.close();
+    };
+  }, []);
+
+  // Listen to the custom event for incoming messages to trigger handleSend
+  const handleSendRef = useRef<any>(null);
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  });
+
+  useEffect(() => {
+    const listener = (e: any) => {
+      const msg = e.detail;
+      handleSendRef.current(msg);
+    };
+    window.addEventListener('incoming_whatsapp', listener);
+    return () => window.removeEventListener('incoming_whatsapp', listener);
+  }, []);
 
   // Ensure there's an active conversation if user starts typing and none exists
   const getOrCreateActiveConv = (): Conversation => {
@@ -215,6 +266,13 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
                   }
                 }
               }, 500);
+            } else if (tool === 'send_whatsapp_message') {
+              const pws = persistentWsRef.current;
+              if (pws && pws.readyState === WebSocket.OPEN) {
+                pws.send(JSON.stringify({ type: 'send_whatsapp_message', message: args.message, number: args.number }));
+              } else {
+                console.error("Failed to send WhatsApp message: persistent WS not connected");
+              }
             }
             }
             keepGoing = false;
@@ -252,7 +310,7 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
       const { tool, args } = msg.parsedAction;
       if (tool === 'run_terminal_command') {
         try {
-          const ws = new WebSocket('ws://localhost:8765');
+          const ws = new WebSocket(wsUrl());
           ws.onopen = () => {
             const reqId = mkId();
             ws.send(JSON.stringify({ type: 'agent_execute', command: args.command, id: reqId }));
@@ -288,6 +346,13 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
           } catch (e) {
             console.error("Screenshot failed", e);
           }
+        }
+      } else if (tool === 'send_whatsapp_message') {
+        const pws = persistentWsRef.current;
+        if (pws && pws.readyState === WebSocket.OPEN) {
+          pws.send(JSON.stringify({ type: 'send_whatsapp_message', message: args.message, number: args.number }));
+        } else {
+          console.error("Failed to send WhatsApp message: persistent WS not connected");
         }
       }
     }
@@ -501,4 +566,4 @@ export default function AgentChat({ allCells, references, modelConfig, isOpen, o
       </div>
     </div>
   );
-}
+});

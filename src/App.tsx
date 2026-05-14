@@ -5,6 +5,7 @@ import { ModelConfig } from './providers/types';
 import { generateVisualCell, runFloodlightPlan } from './aiService';
 import { PROVIDERS, getActiveProvider, getActiveModel, setActiveProvider, setActiveModel } from './providers/registry';
 import { getNotebook, saveNotebook, deleteNotebook, getActiveNotebookId, setActiveNotebookId, createBlankNotebook, migrateOrLoadInitialNotebook, getAllNotebooks } from './notebookStorage';
+import { apiFetch } from './serverClient';
 import ModelSelector from './components/ModelSelector';
 import SettingsModal from './components/SettingsModal';
 import CellComponent from './components/CellComponent';
@@ -18,6 +19,7 @@ import PrismAnalyzer from './components/PrismAnalyzer';
 import Shipper from './components/Shipper';
 import TerminalManager from './components/TerminalManager';
 import { Terminal as TerminalIcon } from 'lucide-react';
+import 'katex/dist/katex.min.css';
 
 const GEMINI_ENV_KEY = process.env.GEMINI_API_KEY || '';
 function mkId() { return Math.random().toString(36).substr(2, 9); }
@@ -37,6 +39,30 @@ export default function App() {
   
   const [activeNbId, setActiveNbId] = useState<string>(() => getActiveNotebookId() || notebooks[0].id);
   const activeNb = notebooks.find(n => n.id === activeNbId) || notebooks[0];
+
+  // Recovery mechanism: If the browser's localStorage is wiped, pull from the Python DB
+  useEffect(() => {
+    apiFetch('/api/notebooks')
+      .then(res => res.json())
+      .then(dbMeta => {
+        if (!Array.isArray(dbMeta) || dbMeta.length === 0) return;
+        const localMeta = JSON.parse(localStorage.getItem('vnb-meta-v3') || '[]');
+        // If browser cache is empty but Python DB has data, perform a full recovery
+        if (localMeta.length === 0 || (localMeta.length === 1 && localMeta[0].name === 'My First Notebook' && dbMeta.length > 0 && dbMeta[0].name !== 'My First Notebook')) {
+          apiFetch(`/api/notebooks/${dbMeta[0].id}`)
+            .then(res => res.json())
+            .then(fullNb => {
+              if (!fullNb || !fullNb.id) return;
+              localStorage.setItem('vnb-meta-v3', JSON.stringify(dbMeta));
+              localStorage.setItem(`vnb-data-${fullNb.id}`, JSON.stringify(fullNb));
+              localStorage.setItem('vnb-active-id-v3', fullNb.id);
+              setActiveNbId(fullNb.id);
+              setNotebooks([fullNb, ...dbMeta.slice(1).map((m: any) => ({ ...m, cells: [], references: [], conversations: [] }))]);
+            });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const setCells = useCallback((updater: CellData[] | ((cells: CellData[]) => CellData[])) => {
     setNotebooks(prev => {
@@ -388,7 +414,7 @@ export default function App() {
 
       <div className="flex flex-1 overflow-hidden relative">
         <input type="file" ref={importInputRef} onChange={handleImportNotebook} className="hidden" accept=".html,.ipynb,.jl,.txt,.md" />
-        <Sidebar notebooks={notebooks} activeId={activeNbId} onSwitch={(id) => { setActiveNbId(id); setActiveNotebookId(id); }} onCreate={handleCreateNotebook} onDelete={handleDeleteNotebook} onOpenTemplates={() => setShowTemplates(true)} onImport={() => importInputRef.current?.click()} isOpen={sidebarOpen} />
+        <Sidebar notebooks={notebooks} activeId={activeNbId} onSwitch={(id) => { setActiveNbId(id); setActiveNotebookId(id); setNotebooks(getAllNotebooks()); }} onCreate={handleCreateNotebook} onDelete={handleDeleteNotebook} onOpenTemplates={() => setShowTemplates(true)} onImport={() => importInputRef.current?.click()} isOpen={sidebarOpen} />
         <div 
           className="flex-1 flex flex-col transition-all duration-300 overflow-y-auto"
           style={{ 

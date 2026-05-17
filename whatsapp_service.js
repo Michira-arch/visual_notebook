@@ -4,6 +4,7 @@ import WebSocket from 'ws';
 import fs from 'fs';
 import Pino from 'pino';
 import * as dotenv from 'dotenv';
+import dns from 'dns';
 
 dotenv.config();
 
@@ -11,6 +12,36 @@ let sock;
 let currentQr = null;
 let isConnected = false;
 let ws;
+let isReconnecting = false;
+let currentStatus = 'Starting...';
+
+function updateStatus(status) {
+    currentStatus = status;
+    process.stdout.write(`\r\x1b[K[WhatsApp] ${status}`);
+}
+
+async function attemptReconnect() {
+    if (isReconnecting) return;
+    isReconnecting = true;
+
+    const checkNetwork = () => new Promise(resolve => {
+        dns.lookup('web.whatsapp.com', (err) => resolve(!err));
+    });
+
+    while (true) {
+        const isOnline = await checkNetwork();
+        if (isOnline) {
+            updateStatus('Reconnecting...');
+            await new Promise(res => setTimeout(res, 2000));
+            isReconnecting = false;
+            connectToWhatsApp();
+            break;
+        } else {
+            updateStatus('Disconnected - Waiting for internet (Checking every 15s)...');
+            await new Promise(res => setTimeout(res, 15000));
+        }
+    }
+}
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
@@ -35,11 +66,12 @@ async function connectToWhatsApp() {
         
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('connection closed due to ', lastDisconnect.error?.message || lastDisconnect.error, ', reconnecting ', shouldReconnect);
             if (shouldReconnect) {
-                connectToWhatsApp();
+                updateStatus('Disconnected');
+                attemptReconnect();
             } else {
-                console.log('Device removed or logged out. Clearing auth info to generate new QR...');
+                updateStatus('Logged out. Clearing auth info to generate new QR...');
+                console.log(); // print newline
                 try { fs.rmSync('baileys_auth_info', { recursive: true, force: true }); } catch (e) {}
                 currentQr = null;
                 isConnected = false;
@@ -49,7 +81,7 @@ async function connectToWhatsApp() {
                 setTimeout(connectToWhatsApp, 2000);
             }
         } else if (connection === 'open') {
-            console.log('opened connection');
+            updateStatus('Connected');
             isConnected = true;
             currentQr = null;
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -66,7 +98,8 @@ async function connectToWhatsApp() {
             if (!msg.key.fromMe && msg.message) {
                 const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
                 if (text) {
-                    console.log(`Received message: ${text} from ${msg.key.remoteJid}`);
+                    console.log(`\nReceived message: ${text} from ${msg.key.remoteJid}`);
+                    updateStatus(currentStatus); // restore status line
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({
                             type: 'whatsapp_message',

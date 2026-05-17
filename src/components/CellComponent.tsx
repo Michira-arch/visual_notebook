@@ -10,6 +10,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import MermaidChart from './MermaidChart';
 import CodeCell from './CodeCell';
+import SandboxCell from './SandboxCell';
 
 const remarkPlugins = [remarkGfm, remarkMath];
 const rehypePlugins = [rehypeKatex];
@@ -52,6 +53,22 @@ export default React.memo(function CellComponent({ cell, allCells, references, m
       onUpdate(cell.id, { versions, currentVersionIndex: versions.length - 1 });
     }
   };
+
+  if (cell.type === 'sandbox') {
+    return (
+      <SandboxCell
+        id={cell.id}
+        sandboxHtml={cell.sandboxHtml || ''}
+        sandboxCss={cell.sandboxCss || ''}
+        sandboxJs={cell.sandboxJs || ''}
+        autoRun={cell.sandboxAutoRun ?? true}
+        isCollapsed={cell.isCollapsed}
+        onUpdate={(html, css, js, auto) => onUpdate(cell.id, { sandboxHtml: html, sandboxCss: css, sandboxJs: js, sandboxAutoRun: auto })}
+        onToggleCollapse={() => onUpdate(cell.id, { isCollapsed: !cell.isCollapsed })}
+        onRemove={() => onRemove(cell.id)}
+      />
+    );
+  }
 
   if (cell.type === 'code') {
     return (
@@ -122,7 +139,23 @@ export default React.memo(function CellComponent({ cell, allCells, references, m
                   </div>
                 </div>
               )
-              : <div className="markdown-body prose prose-invert max-w-none text-sm" onClick={() => onUpdate(cell.id, { isEditing: true })}><Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins as any}>{cell.markdownContent || '*Empty markdown cell*'}</Markdown></div>
+              : <div className="markdown-body prose prose-invert max-w-none text-sm" onClick={() => onUpdate(cell.id, { isEditing: true })}>
+                  <Markdown 
+                    remarkPlugins={remarkPlugins} 
+                    rehypePlugins={rehypePlugins as any}
+                    components={{
+                      code({ node, inline, className, children, ...props }: any) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        if (!inline && match && match[1] === 'mermaid') {
+                          return <MermaidChart chart={String(children).replace(/\n$/, '')} />;
+                        }
+                        return <code className={className} {...props}>{children}</code>;
+                      }
+                    }}
+                  >
+                    {cell.markdownContent || '*Empty markdown cell*'}
+                  </Markdown>
+                </div>
             }
           </div>
         )}

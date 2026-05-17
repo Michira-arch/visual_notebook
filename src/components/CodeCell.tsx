@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Copy, Check, ChevronDown, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
 
 const LANGUAGES = ['plaintext', 'python', 'javascript', 'typescript', 'rust', 'go', 'java', 'c', 'cpp', 'sql', 'bash', 'json', 'yaml', 'html', 'css', 'markdown'];
@@ -15,6 +15,7 @@ interface Props {
 
 export default function CodeCell({ id, codeContent, language, isCollapsed, onUpdate, onToggleCollapse, onRemove }: Props) {
   const [copied, setCopied] = useState(false);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   const copy = async () => {
     await navigator.clipboard.writeText(codeContent);
@@ -75,10 +76,13 @@ export default function CodeCell({ id, codeContent, language, isCollapsed, onUpd
       {!isCollapsed && (
         <>
           {/* Editor area */}
-          <div className="relative bg-black/40">
+          <div className="relative bg-black/40 resize-y overflow-hidden min-h-[180px]" style={{ height: '240px' }}>
             {/* Line numbers */}
-            <div className="flex">
-              <div className="flex-shrink-0 w-10 bg-black/20 border-r border-[var(--border)] py-4 select-none">
+            <div className="flex h-full">
+              <div 
+                ref={lineNumbersRef}
+                className="flex-shrink-0 w-10 bg-black/20 border-r border-[var(--border)] py-4 select-none overflow-hidden"
+              >
                 {(codeContent || '').split('\n').map((_, i) => (
                   <div key={i} className="text-[var(--text-dim)] text-xs font-mono text-right pr-2 leading-6 opacity-40">
                     {i + 1}
@@ -88,9 +92,14 @@ export default function CodeCell({ id, codeContent, language, isCollapsed, onUpd
               <textarea
                 value={codeContent}
                 onChange={e => onUpdate(e.target.value, language)}
+                onScroll={e => {
+                  if (lineNumbersRef.current) {
+                    lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
+                  }
+                }}
                 placeholder={`// Write your ${language} code here...`}
                 spellCheck={false}
-                className="flex-1 bg-transparent resize-none outline-none text-[var(--cyan)] font-mono text-sm leading-6 p-4 min-h-[180px] placeholder-[var(--text-dim)]/40"
+                className="flex-1 h-full bg-transparent resize-none outline-none text-[var(--cyan)] font-mono text-sm leading-6 p-4 placeholder-[var(--text-dim)]/40 overflow-auto"
                 style={{ tabSize: 2 }}
                 onKeyDown={e => {
                   // Insert tab as spaces

@@ -16,7 +16,8 @@ export default function PresentationMode({ cells, onClose }: Props) {
   const viewableCells = cells.filter(c =>
     (c.type === 'canvas' && c.versions.length > 0) ||
     c.type === 'markdown' ||
-    (c.type === 'code' && c.codeContent)
+    (c.type === 'code' && c.codeContent) ||
+    (c.type === 'sandbox' && (c.sandboxHtml || c.sandboxCss || c.sandboxJs))
   );
 
   const [idx, setIdx] = useState(0);
@@ -80,6 +81,16 @@ export default function PresentationMode({ cells, onClose }: Props) {
               <div className="text-[10px] text-[var(--text-dim)] mb-3 uppercase tracking-widest">{cell.language}</div>
               {cell.codeContent}
             </pre>
+          )}
+          {cell.type === 'sandbox' && (
+            <div className="w-full" style={{ height: '70vh' }}>
+              <iframe
+                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#0f172a;color:#e2e8f0;overflow:auto}${cell.sandboxCss || ''}</style></head><body>${cell.sandboxHtml || ''}<script>try{${cell.sandboxJs || ''}}catch(e){console.error(e)}<\/script></body></html>`}
+                sandbox="allow-scripts"
+                className="w-full h-full border border-[var(--border)] rounded-lg"
+                title="Sandbox presentation"
+              />
+            </div>
           )}
         </div>
       </div>

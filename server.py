@@ -66,6 +66,8 @@ def init_db():
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS notebooks
                  (id TEXT PRIMARY KEY, name TEXT, updated_at INTEGER, data TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS researches
+                 (id TEXT PRIMARY KEY, title TEXT, author TEXT, updated_at INTEGER, data TEXT)''')
     conn.commit()
     conn.close()
 
@@ -402,12 +404,70 @@ async def main():
         conn.close()
         return add_cors_headers(web.json_response({"status": "ok"}))
 
+    async def get_researches_meta(request):
+        if not _http_token_ok(request):
+            return _unauthorized()
+        conn = sqlite3.connect('notebooks.db')
+        c = conn.cursor()
+        c.execute("SELECT id, title, author, updated_at FROM researches ORDER BY updated_at DESC")
+        rows = c.fetchall()
+        conn.close()
+        meta_list = [{"id": r[0], "title": r[1], "author": r[2], "updatedAt": r[3]} for r in rows]
+        return add_cors_headers(web.json_response(meta_list))
+
+    async def get_research(request):
+        if not _http_token_ok(request):
+            return _unauthorized()
+        r_id = request.match_info['id']
+        conn = sqlite3.connect('notebooks.db')
+        c = conn.cursor()
+        c.execute("SELECT data FROM researches WHERE id=?", (r_id,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return add_cors_headers(web.json_response(json.loads(row[0])))
+        return add_cors_headers(web.Response(status=404, text="Research not found"))
+
+    async def save_research(request):
+        if not _http_token_ok(request):
+            return _unauthorized()
+        data = await request.json()
+        r_id = data.get('id')
+        title = data.get('title', 'Untitled')
+        author = data.get('author', 'Unknown')
+        updated_at = data.get('updatedAt', 0)
+        conn = sqlite3.connect('notebooks.db')
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO researches (id, title, author, updated_at, data) VALUES (?, ?, ?, ?, ?)",
+                  (r_id, title, author, updated_at, json.dumps(data)))
+        conn.commit()
+        conn.close()
+        return add_cors_headers(web.json_response({"status": "ok"}))
+
+    async def delete_research_handler(request):
+        if not _http_token_ok(request):
+            return _unauthorized()
+        r_id = request.match_info['id']
+        conn = sqlite3.connect('notebooks.db')
+        c = conn.cursor()
+        c.execute("DELETE FROM researches WHERE id=?", (r_id,))
+        conn.commit()
+        conn.close()
+        return add_cors_headers(web.json_response({"status": "ok"}))
+
     app.router.add_options('/api/notebooks', options_handler)
     app.router.add_options('/api/notebooks/{id}', options_handler)
     app.router.add_get('/api/notebooks', get_notebooks_meta)
     app.router.add_get('/api/notebooks/{id}', get_notebook)
     app.router.add_post('/api/notebooks', save_notebook)
     app.router.add_delete('/api/notebooks/{id}', delete_notebook_handler)
+
+    app.router.add_options('/api/researches', options_handler)
+    app.router.add_options('/api/researches/{id}', options_handler)
+    app.router.add_get('/api/researches', get_researches_meta)
+    app.router.add_get('/api/researches/{id}', get_research)
+    app.router.add_post('/api/researches', save_research)
+    app.router.add_delete('/api/researches/{id}', delete_research_handler)
 
     # Free ports from any previous run before binding
     kill_port(8766)

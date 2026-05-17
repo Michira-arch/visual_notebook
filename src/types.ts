@@ -1,4 +1,4 @@
-export type CellType = 'canvas' | 'markdown' | 'code';
+export type CellType = 'canvas' | 'markdown' | 'code' | 'sandbox';
 
 export interface Reference {
   id: string;
@@ -26,6 +26,11 @@ export interface CellData {
   codeContent?: string;
   language?: string;
   isCollapsed?: boolean;
+  // sandbox cells (live HTML/CSS/JS)
+  sandboxHtml?: string;
+  sandboxCss?: string;
+  sandboxJs?: string;
+  sandboxAutoRun?: boolean;
 }
 
 export interface ChatMessage {
@@ -56,4 +61,16 @@ export interface NotebookState {
   activeConversationId?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface ResearchArticle {
+  id: string;
+  title: string;
+  author: string;
+  content: string; // Markdown + LaTeX
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  sourceUrl?: string;
+  abstract?: string;
 }

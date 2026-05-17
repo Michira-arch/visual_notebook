@@ -17,8 +17,9 @@ import PresentationMode from './components/PresentationMode';
 import AgentChat from './components/AgentChat';
 import PrismAnalyzer from './components/PrismAnalyzer';
 import Shipper from './components/Shipper';
+import ResearchBank from './components/ResearchBank';
 import TerminalManager from './components/TerminalManager';
-import { Terminal as TerminalIcon } from 'lucide-react';
+import { Terminal as TerminalIcon, GraduationCap } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 
 const GEMINI_ENV_KEY = process.env.GEMINI_API_KEY || '';
@@ -126,6 +127,7 @@ export default function App() {
   const [showPrism, setShowPrism] = useState(false);
   const [showShipper, setShowShipper] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
+  const [showResearch, setShowResearch] = useState(false);
   const [chatWidth, setChatWidth] = useState(320);
   
   const [floodlightPrompt, setFloodlightPrompt] = useState('');
@@ -145,7 +147,12 @@ export default function App() {
   const handleModelChange = (mid: string) => { setActiveModel(activeProviderId, mid); setActiveModelId(mid); };
 
   const addCell = useCallback((type: CellType = 'canvas') => {
-    const c: CellData = { id: mkId(), type, versions: [], currentVersionIndex: -1, isEditing: type === 'markdown', isLoading: false, markdownContent: '', codeContent: '', language: 'javascript' };
+    const c: CellData = {
+      id: mkId(), type, versions: [], currentVersionIndex: -1,
+      isEditing: type === 'markdown', isLoading: false,
+      markdownContent: '', codeContent: '', language: 'javascript',
+      sandboxHtml: '', sandboxCss: '', sandboxJs: '', sandboxAutoRun: true,
+    };
     setCells(p => [...p, c]);
     return c.id;
   }, [setCells]);
@@ -169,10 +176,17 @@ export default function App() {
       let newCells = [...activeNb.cells];
       for (const item of plan) {
         const id = mkId();
-        const nc: CellData = { id, type: item.type, versions: [], currentVersionIndex: -1, isEditing: false, isLoading: item.type === 'canvas', markdownContent: item.type === 'markdown' ? item.content : '' };
+        const nc: CellData = { id, type: item.type, versions: [], currentVersionIndex: -1, isEditing: false, isLoading: item.type === 'canvas', markdownContent: item.type === 'markdown' ? item.content : '', sandboxHtml: '', sandboxCss: '', sandboxJs: '', sandboxAutoRun: true };
         newCells.push(nc);
         setCells([...newCells]);
-        if (item.type === 'canvas') {
+        if (item.type === 'sandbox') {
+          // Sandbox cells from floodlight get their content as HTML
+          const idx = newCells.findIndex(c => c.id === id);
+          if (idx > -1) {
+            newCells[idx] = { ...newCells[idx], sandboxHtml: item.content };
+            setCells([...newCells]);
+          }
+        } else if (item.type === 'canvas') {
           try {
             const html = await generateVisualCell(item.content, [], newCells, activeNb.references, modelConfig);
             const idx = newCells.findIndex(c => c.id === id);
@@ -405,6 +419,7 @@ export default function App() {
           <button onClick={() => setShowTerminal(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-cyan-400/70 hover:text-cyan-300 transition-colors" title="System Terminal"><TerminalIcon size={14} /> TERMINAL</button>
           <button onClick={() => setShowPrism(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-amber-400/70 hover:text-amber-300 transition-colors" title="PRISM Code Intelligence"><FileCode2 size={14} /> PRISM</button>
           <button onClick={() => setShowShipper(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-blue-400/70 hover:text-blue-300 transition-colors" title="Shipper Management"><Ship size={14} /> SHIPPER</button>
+          <button onClick={() => setShowResearch(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-amber-400/70 hover:text-amber-300 transition-colors" title="Research Bank"><GraduationCap size={14} /> RESEARCH</button>
           <input type="file" multiple ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
           <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors"><Upload size={14} /> Refs</button>
           <button onClick={() => setShowChat(!showChat)} className={`flex items-center gap-1.5 text-xs font-mono transition-colors ${showChat ? 'text-[var(--cyan)]' : 'text-slate-400 hover:text-white'}`} title="Agent Chat"><Bot size={14} /> Agent</button>
@@ -461,6 +476,7 @@ export default function App() {
       <TerminalManager isOpen={showTerminal} onClose={() => setShowTerminal(false)} />
       <PrismAnalyzer modelConfig={modelConfig} isOpen={showPrism} onClose={() => setShowPrism(false)} />
       <Shipper modelConfig={modelConfig} isOpen={showShipper} onClose={() => setShowShipper(false)} />
+      <ResearchBank isOpen={showResearch} onClose={() => setShowResearch(false)} />
       <AgentChat
         allCells={activeNb.cells}
         references={activeNb.references}
@@ -487,6 +503,14 @@ export default function App() {
             updateCell(id, { markdownContent: content, isEditing: false });
           } else if (type === 'code') {
             updateCell(id, { codeContent: content, language: 'javascript' });
+          } else if (type === 'sandbox') {
+            // For sandbox, content can be raw HTML or a JSON with html/css/js
+            try {
+              const parsed = JSON.parse(content);
+              updateCell(id, { sandboxHtml: parsed.html || '', sandboxCss: parsed.css || '', sandboxJs: parsed.js || '' });
+            } catch {
+              updateCell(id, { sandboxHtml: content });
+            }
           } else {
             // For canvas, content is the prompt - TRIGGER AUTO GENERATION
             updateCell(id, { isLoading: true, versions: [{ prompt: content, content: '', timestamp: Date.now() }], currentVersionIndex: 0 });

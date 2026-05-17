@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Plus, Wand2, Type, Zap, Code2 } from 'lucide-react';
+import { Plus, Wand2, Type, Zap, Code2, Globe } from 'lucide-react';
 import { CellType } from '../types';
 
 export default function NewCellButton({ onAdd, onFloodlight }: { onAdd: (t: CellType) => void; onFloodlight: () => void }) {
@@ -16,6 +16,7 @@ export default function NewCellButton({ onAdd, onFloodlight }: { onAdd: (t: Cell
       <div className={`absolute flex gap-4 transition-all duration-300 ${show ? 'opacity-100 scale-100 pointer-events-auto top-4' : 'opacity-0 scale-95 pointer-events-none top-4'}`}>
         <button onClick={() => { onAdd('markdown'); setShow(false); }} className="flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--bg2)] border border-[var(--border)] hover:border-[var(--green)] hover:text-[var(--green)] transition-all shadow-xl font-mono text-xs uppercase tracking-widest"><Type size={16} /> Markdown</button>
         <button onClick={() => { onAdd('code'); setShow(false); }} className="flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--bg2)] border border-[var(--border)] hover:border-[var(--purple)] hover:text-[var(--purple)] transition-all shadow-xl font-mono text-xs uppercase tracking-widest"><Code2 size={16} /> Code</button>
+        <button onClick={() => { onAdd('sandbox'); setShow(false); }} className="flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--bg2)] border border-[var(--border)] hover:border-[var(--orange)] hover:text-[var(--orange)] transition-all shadow-xl font-mono text-xs uppercase tracking-widest animate-pulse hover:animate-none"><Globe size={16} /> Sandbox</button>
         <button onClick={() => { onFloodlight(); setShow(false); }} className="flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--bg2)] border border-[var(--border)] hover:border-[var(--orange)] hover:text-[var(--orange)] transition-all shadow-xl font-mono text-xs uppercase tracking-widest"><Zap size={16} fill="currentColor" className="opacity-50" /> Floodlight</button>
         <button onClick={() => { onAdd('canvas'); setShow(false); }} className="flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--bg2)] border border-[var(--border)] hover:border-[var(--cyan)] hover:text-[var(--cyan)] transition-all shadow-xl font-mono text-xs uppercase tracking-widest"><Wand2 size={16} /> Canvas</button>
       </div>

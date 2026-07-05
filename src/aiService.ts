@@ -282,17 +282,20 @@ export async function generateChatResponse(
 
 // ─── Auto-Markup ───────────────────────────────────────────────────────────
 
-const MARKUP_SYSTEM_PROMPT = `You are a precise markdown formatter. Your ONLY job is to take plain text and convert it into well-structured markdown.
+const MARKUP_SYSTEM_PROMPT = `You are a precise markdown formatter. Your ONLY job is to take plain text and convert it into well-structured markdown while FULLY PRESERVING the author's original voice, tone, persona, style, and thinking momentum.
 
 Rules:
-- Add headings (# ## ###) where appropriate
+- Keep EVERY word, phrase, and sentence exactly as written — do not paraphrase, reword, or "improve" the author's language
+- Add headings (# ## ###) where appropriate based on the content's structure
 - Add bullet points (-) for lists
-- Add bold (**) and italic (*) for emphasis
-- Add code blocks (\`\`\`) for any code
+- Add bold (**) and italic (*) for emphasis where the author clearly intends it
+- Add code blocks (\`\`\`) for any code or technical notation
 - Add horizontal rules (---) for section breaks
 - Add LaTeX ($...$ or $$...$$) for any math notation
 - Do NOT add commentaries, explanations, or notes
-- Do NOT change the meaning or add new content
+- Do NOT add new content or alter the author's meaning
+- Do NOT change the author's choice of words, colloquialisms, or informal style
+- The author should feel like they wrote this themselves, just with better formatting
 - Return ONLY the markdown, no preambles or wrapping`;
 
 export async function generateMarkup(plainText: string, modelConfig: ModelConfig): Promise<string> {

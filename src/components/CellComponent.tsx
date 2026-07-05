@@ -209,15 +209,15 @@ export default React.memo(function CellComponent({ cell, index, allCells, refere
                 <span className="font-mono text-[10px] tracking-widest text-[var(--green)] uppercase flex items-center gap-1">
                   <Type size={12} /> Markdown {cell.id.slice(0, 4)}
                 </span>
+                {!cell.isCollapsed && (
+                  <button onClick={handleMarkup} disabled={isMarkingUp} className="text-[var(--text-dim)] hover:text-[var(--orange)] transition-colors" title="Auto-Markup">
+                    {isMarkingUp ? <span className="animate-spin text-xs">⟳</span> : <Sparkles size={14} />}
+                  </button>
+                )}
               </div>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 {!cell.isCollapsed && (
-                  <>
-                    <button onClick={handleMarkup} disabled={isMarkingUp} className="text-[var(--text-dim)] hover:text-[var(--orange)] transition-colors" title="Auto-Markup">
-                      {isMarkingUp ? <span className="animate-spin text-xs">⟳</span> : <Sparkles size={14} />}
-                    </button>
-                    <button onClick={() => onUpdate(cell.id, { isEditing: !cell.isEditing })} className="text-[var(--text-dim)] hover:text-white transition-colors"><Edit3 size={14} /></button>
-                  </>
+                  <button onClick={() => onUpdate(cell.id, { isEditing: !cell.isEditing })} className="text-[var(--text-dim)] hover:text-white transition-colors"><Edit3 size={14} /></button>
                 )}
                 <button onClick={() => onRemove(cell.id)} className="text-[var(--text-dim)] hover:text-[var(--red)] transition-colors"><Trash2 size={14} /></button>
               </div>

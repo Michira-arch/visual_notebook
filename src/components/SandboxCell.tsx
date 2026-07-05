@@ -16,9 +16,11 @@ interface Props {
   sandboxJs: string;
   autoRun: boolean;
   isCollapsed?: boolean;
+  executionCount?: number;
   onUpdate: (html: string, css: string, js: string, autoRun: boolean) => void;
   onToggleCollapse: () => void;
   onRemove: () => void;
+  onShiftEnter?: () => void;
 }
 
 const STARTER_HTML = `<div class="scene">
@@ -82,7 +84,7 @@ btn.addEventListener('click', () => {
   console.log('Button clicked', count);
 });`;
 
-export default function SandboxCell({ id, sandboxHtml, sandboxCss, sandboxJs, autoRun, isCollapsed, onUpdate, onToggleCollapse, onRemove }: Props) {
+export default function SandboxCell({ id, sandboxHtml, sandboxCss, sandboxJs, autoRun, isCollapsed, executionCount, onUpdate, onToggleCollapse, onRemove, onShiftEnter }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('html');
   const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([]);
   const [showConsole, setShowConsole] = useState(false);
@@ -223,6 +225,9 @@ ${js}
             </span>
             Sandbox {id.slice(0, 4)}
           </span>
+          {executionCount !== undefined && (
+            <span className="font-mono text-[10px] text-[var(--text-dim)]">In [{executionCount}]</span>
+          )}
           {isCollapsed && (
             <span className="text-[10px] font-mono text-[var(--text-dim)] truncate max-w-[300px] opacity-60">
               {html.split('\n')[0] || 'Empty sandbox'}
@@ -357,6 +362,10 @@ ${js}
                     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                       e.preventDefault();
                       runPreview();
+                    }
+                    if (e.key === 'Enter' && e.shiftKey && onShiftEnter) {
+                      e.preventDefault();
+                      onShiftEnter();
                     }
                   }}
                 />

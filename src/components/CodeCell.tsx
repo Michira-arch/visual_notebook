@@ -8,12 +8,14 @@ interface Props {
   codeContent: string;
   language: string;
   isCollapsed?: boolean;
+  executionCount?: number;
   onUpdate: (code: string, lang: string) => void;
   onToggleCollapse: () => void;
   onRemove: () => void;
+  onShiftEnter?: () => void;
 }
 
-export default function CodeCell({ id, codeContent, language, isCollapsed, onUpdate, onToggleCollapse, onRemove }: Props) {
+export default function CodeCell({ id, codeContent, language, isCollapsed, executionCount, onUpdate, onToggleCollapse, onRemove, onShiftEnter }: Props) {
   const [copied, setCopied] = useState(false);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
 
@@ -40,6 +42,9 @@ export default function CodeCell({ id, codeContent, language, isCollapsed, onUpd
             <span className="w-2 h-2 rounded-full bg-[var(--purple)] opacity-70" />
             Code {id.slice(0, 4)}
           </span>
+          {executionCount !== undefined && (
+            <span className="font-mono text-[10px] text-[var(--text-dim)]">In [{executionCount}]</span>
+          )}
 
           {!isCollapsed && (
             <div className="relative">
@@ -114,6 +119,10 @@ export default function CodeCell({ id, codeContent, language, isCollapsed, onUpd
                       e.currentTarget.selectionStart = start + 2;
                       e.currentTarget.selectionEnd = start + 2;
                     });
+                  }
+                  if (e.key === 'Enter' && e.shiftKey && onShiftEnter) {
+                    e.preventDefault();
+                    onShiftEnter();
                   }
                 }}
               />

@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, FileText, FileCode2, Settings, Trash2, Zap, PlaySquare, Menu, Bot, Download, Ship, Maximize2, Minimize2 } from 'lucide-react';
-import { CellData, CellType, Reference, NotebookState } from './types';
+import { Upload, FileText, FileCode2, Settings, Trash2, Zap, PlaySquare, Menu, Bot, Download, Ship, Maximize2, Minimize2, List, BookOpen, ChevronDown, Plus } from 'lucide-react';
+import { CellData, CellType, Reference, NotebookState, CommandAction } from './types';
 import { ModelConfig } from './providers/types';
 import { generateVisualCell, runFloodlightPlan } from './aiService';
 import { PROVIDERS, getActiveProvider, getActiveModel, setActiveProvider, setActiveModel } from './providers/registry';
 import { getNotebook, saveNotebook, deleteNotebook, getActiveNotebookId, setActiveNotebookId, createBlankNotebook, migrateOrLoadInitialNotebook, getAllNotebooks } from './notebookStorage';
 import { apiFetch } from './serverClient';
+import { useCellNavigation } from './useCellNavigation';
 import ModelSelector from './components/ModelSelector';
 import SettingsModal from './components/SettingsModal';
 import CellComponent from './components/CellComponent';
@@ -19,6 +20,8 @@ import PrismAnalyzer from './components/PrismAnalyzer';
 import Shipper from './components/Shipper';
 import ResearchBank from './components/ResearchBank';
 import TerminalManager from './components/TerminalManager';
+import CommandPalette from './components/CommandPalette';
+import TableOfContents from './components/TableOfContents';
 import { Terminal as TerminalIcon, GraduationCap } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 
@@ -128,6 +131,8 @@ export default function App() {
   const [showShipper, setShowShipper] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [showResearch, setShowResearch] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showTOC, setShowTOC] = useState(false);
   const [chatWidth, setChatWidth] = useState(320);
   
   const [floodlightPrompt, setFloodlightPrompt] = useState('');
@@ -146,19 +151,101 @@ export default function App() {
   };
   const handleModelChange = (mid: string) => { setActiveModel(activeProviderId, mid); setActiveModelId(mid); };
 
-  const addCell = useCallback((type: CellType = 'canvas') => {
+  const addCell = useCallback((type: CellType = 'canvas', atIndex?: number) => {
     const c: CellData = {
       id: mkId(), type, versions: [], currentVersionIndex: -1,
       isEditing: type === 'markdown', isLoading: false,
       markdownContent: '', codeContent: '', language: 'javascript',
       sandboxHtml: '', sandboxCss: '', sandboxJs: '', sandboxAutoRun: true,
     };
-    setCells(p => [...p, c]);
+    setCells(p => {
+      if (atIndex !== undefined && atIndex >= 0 && atIndex <= p.length) {
+        const next = [...p];
+        next.splice(atIndex, 0, c);
+        return next;
+      }
+      return [...p, c];
+    });
     return c.id;
   }, [setCells]);
 
   const updateCell = useCallback((id: string, u: Partial<CellData>) => { setCells(p => p.map(c => c.id === id ? { ...c, ...u } : c)); }, [setCells]);
   const removeCell = useCallback((id: string) => { setCells(p => p.filter(c => c.id !== id)); }, [setCells]);
+
+  // Jupyter-style cell navigation
+  const cellNav = useCellNavigation(activeNb.cells, addCell, updateCell, removeCell);
+
+  // Scroll cell into view when focused
+  useEffect(() => {
+    if (cellNav.focusedCellId) {
+      const el = document.getElementById(`cell-${cellNav.focusedCellId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [cellNav.focusedCellId]);
+
+  // Run a specific cell by type
+  const runCellByType = useCallback((cellId: string) => {
+    const cell = activeNb.cells.find(c => c.id === cellId);
+    if (!cell) return;
+    if (cell.type === 'markdown') {
+      updateCell(cellId, { isEditing: false, executionCount: (cell.executionCount ?? 0) + 1, lastRunTimestamp: Date.now() });
+    } else if (cell.type === 'code') {
+      updateCell(cellId, { executionCount: (cell.executionCount ?? 0) + 1, lastRunTimestamp: Date.now() });
+    } else if (cell.type === 'sandbox') {
+      updateCell(cellId, { executionCount: (cell.executionCount ?? 0) + 1, lastRunTimestamp: Date.now() });
+    }
+  }, [activeNb.cells, updateCell]);
+
+  const runAllCells = useCallback(() => {
+    for (const cell of activeNb.cells) runCellByType(cell.id);
+  }, [activeNb.cells, runCellByType]);
+
+  const runAllAbove = useCallback(() => {
+    const idx = cellNav.focusedIndex;
+    if (idx < 0) return;
+    for (let i = 0; i <= idx; i++) runCellByType(activeNb.cells[i].id);
+  }, [activeNb.cells, cellNav.focusedIndex, runCellByType]);
+
+  const runAllBelow = useCallback(() => {
+    const idx = cellNav.focusedIndex;
+    if (idx < 0) return;
+    for (let i = idx; i < activeNb.cells.length; i++) runCellByType(activeNb.cells[i].id);
+  }, [activeNb.cells, cellNav.focusedIndex, runCellByType]);
+
+  const runAndFocusNext = useCallback(() => {
+    if (cellNav.focusedCellId) runCellByType(cellNav.focusedCellId);
+    cellNav.moveFocus(1);
+  }, [cellNav, runCellByType]);
+
+  // Drag and drop
+  const dragCellId = useRef<string | null>(null);
+
+  const handleDragStart = useCallback((e: React.DragEvent, id: string) => {
+    dragCellId.current = id;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('text/plain') || dragCellId.current;
+    if (!draggedId || draggedId === targetId) return;
+    const reordered = cellNav.moveCell(draggedId, activeNb.cells.findIndex(c => c.id === targetId));
+    if (reordered) setCells(reordered);
+    dragCellId.current = null;
+  }, [cellNav, activeNb.cells, setCells]);
+
+  // Keyboard handler
+  const cellsContainerRef = useRef<HTMLDivElement>(null);
+  const handleCellsKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const result = cellNav.handleKeyDown(e);
+    if (result === 'command-palette') setShowCommandPalette(true);
+  }, [cellNav]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     for (const file of Array.from(e.target.files || [])) {
@@ -417,6 +504,8 @@ export default function App() {
           <button onClick={handleExportHtml} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors" title="Export HTML"><Download size={14} /> Export</button>
           <button onClick={() => setShowPresentation(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors" title="Presentation Mode"><PlaySquare size={14} /> Present</button>
           <button onClick={() => setShowTerminal(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-cyan-400/70 hover:text-cyan-300 transition-colors" title="System Terminal"><TerminalIcon size={14} /> TERMINAL</button>
+          <button onClick={() => setShowTOC(!showTOC)} className={`hidden sm:flex items-center gap-1.5 text-xs font-mono transition-colors ${showTOC ? 'text-[var(--cyan)]' : 'text-slate-400 hover:text-white'}`} title="Table of Contents"><BookOpen size={14} /> TOC</button>
+          <button onClick={() => setShowCommandPalette(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors" title="Command Palette (Ctrl+Shift+P)"><List size={14} /> CMD</button>
           <button onClick={() => setShowPrism(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-amber-400/70 hover:text-amber-300 transition-colors" title="PRISM Code Intelligence"><FileCode2 size={14} /> PRISM</button>
           <button onClick={() => setShowShipper(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-blue-400/70 hover:text-blue-300 transition-colors" title="Shipper Management"><Ship size={14} /> SHIPPER</button>
           <button onClick={() => setShowResearch(true)} className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-amber-400/70 hover:text-amber-300 transition-colors" title="Research Bank"><GraduationCap size={14} /> RESEARCH</button>
@@ -449,9 +538,77 @@ export default function App() {
               ))}
             </div>
           )}
-          <main className="w-full max-w-4xl mx-auto p-8 relative">
-            {activeNb.cells.map(cell => <CellComponent key={cell.id} cell={cell} allCells={activeNb.cells} references={activeNb.references} modelConfig={modelConfig} onUpdate={updateCell} onRemove={removeCell} />)}
-            <NewCellButton onAdd={addCell} onFloodlight={() => setShowFloodlight(true)} />
+          <main className="w-full max-w-4xl mx-auto p-8 relative"
+            ref={cellsContainerRef}
+            tabIndex={0}
+            onKeyDown={handleCellsKeyDown}
+            onClick={() => cellsContainerRef.current?.focus()}>
+            {/* Run All toolbar */}
+            <div className="flex items-center gap-2 mb-4">
+              <button onClick={runAllCells} className="flex items-center gap-1 px-3 py-1.5 rounded bg-[var(--bg2)] border border-[var(--border)] text-[10px] font-mono text-[var(--text-dim)] hover:text-white hover:border-[var(--cyan)] transition-all" title="Run All Cells">
+                <PlaySquare size={12} /> Run All
+              </button>
+              <button onClick={runAllAbove} className="flex items-center gap-1 px-3 py-1.5 rounded bg-[var(--bg2)] border border-[var(--border)] text-[10px] font-mono text-[var(--text-dim)] hover:text-white hover:border-[var(--cyan)] transition-all" title="Run All Above">
+                <ChevronDown size={12} className="rotate-180" /> Run Above
+              </button>
+              <button onClick={runAllBelow} className="flex items-center gap-1 px-3 py-1.5 rounded bg-[var(--bg2)] border border-[var(--border)] text-[10px] font-mono text-[var(--text-dim)] hover:text-white hover:border-[var(--cyan)] transition-all" title="Run All Below">
+                <ChevronDown size={12} /> Run Below
+              </button>
+              <div className="flex-1" />
+              <span className="text-[9px] font-mono text-[var(--text-dim)] opacity-50">{cellNav.mode === 'command' ? 'COMMAND MODE' : 'EDIT MODE'} · {activeNb.cells.length} cells</span>
+            </div>
+            {activeNb.cells.length === 0 && (
+              <div className="text-center py-20 text-[var(--text-dim)] font-mono text-xs tracking-widest" onClick={() => cellNav.insertBelow()}>
+                Click here or press <kbd className="px-1 bg-[var(--bg2)] rounded">b</kbd> to add a cell
+              </div>
+            )}
+            {activeNb.cells.map((cell, i) => (
+              <React.Fragment key={cell.id}>
+                {/* Gap click insert above */}
+                {i === 0 && (
+                  <div className="h-3 hover:h-6 transition-all cursor-pointer group relative" onClick={() => cellNav.insertAbove()}>
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <div className="w-8 h-px bg-[var(--border)] group-hover:bg-[var(--cyan)] transition-colors"><Plus size={10} className="absolute -top-1 -left-1 text-[var(--text-dim)] group-hover:text-[var(--cyan)]" /></div>
+                    </div>
+                  </div>
+                )}
+                <CellComponent
+                  key={cell.id}
+                  cell={cell}
+                  index={i}
+                  allCells={activeNb.cells}
+                  references={activeNb.references}
+                  modelConfig={modelConfig}
+                  isFocused={cellNav.focusedCellId === cell.id}
+                  mode={cellNav.mode}
+                  onUpdate={updateCell}
+                  onRemove={removeCell}
+                  onMoveUp={() => { const r = cellNav.moveCell(cell.id, i - 1); if (r) setCells(r); }}
+                  onMoveDown={() => { const r = cellNav.moveCell(cell.id, i + 1); if (r) setCells(r); }}
+                  onInsertAbove={() => cellNav.insertAbove()}
+                  onInsertBelow={() => cellNav.insertBelow()}
+                  onDuplicate={() => cellNav.duplicateCell(cell.id)}
+                  onChangeType={(type) => cellNav.changeCellType(cell.id, type)}
+                  onRun={() => runCellByType(cell.id)}
+                  onRunAndFocusNext={runAndFocusNext}
+                  focusCell={() => cellNav.focusCell(cell.id)}
+                  onDragStart={(e) => handleDragStart(e, cell.id)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, cell.id)}
+                />
+                {/* Gap click insert below */}
+                <div className="h-3 hover:h-6 transition-all cursor-pointer group relative" onClick={() => {
+                  const newCellId = addCell('canvas', i + 1);
+                  cellNav.setFocusedCellId(newCellId);
+                  cellNav.setMode('edit');
+                }}>
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <div className="w-8 h-px bg-[var(--border)] group-hover:bg-[var(--cyan)] transition-colors"><Plus size={10} className="absolute -top-1 -left-1 text-[var(--text-dim)] group-hover:text-[var(--cyan)]" /></div>
+                  </div>
+                </div>
+              </React.Fragment>
+            ))}
+            <NewCellButton onAdd={(t) => { const id = addCell(t); cellNav.setFocusedCellId(id); cellNav.setMode('edit'); }} onFloodlight={() => setShowFloodlight(true)} />
           </main>
         </div>
       </div>
@@ -526,6 +683,25 @@ export default function App() {
           executeFloodlight(prompt);
         }}
       />
+      {showCommandPalette && <CommandPalette actions={[
+        { id: 'run-all', label: 'Run All Cells', category: 'notebook' as const, action: runAllCells },
+        { id: 'run-above', label: 'Run All Above', category: 'notebook' as const, action: runAllAbove },
+        { id: 'run-below', label: 'Run All Below', category: 'notebook' as const, action: runAllBelow },
+        { id: 'insert-above', label: 'Insert Cell Above', shortcut: 'a', category: 'cell' as const, action: cellNav.insertAbove },
+        { id: 'insert-below', label: 'Insert Cell Below', shortcut: 'b', category: 'cell' as const, action: cellNav.insertBelow },
+        { id: 'delete-cell', label: 'Delete Cell', shortcut: 'dd', category: 'cell' as const, action: cellNav.deleteFocused },
+        { id: 'copy-cell', label: 'Copy Cell', shortcut: 'c', category: 'cell' as const, action: cellNav.copyFocused },
+        { id: 'cut-cell', label: 'Cut Cell', shortcut: 'x', category: 'cell' as const, action: cellNav.cutFocused },
+        { id: 'paste-cell', label: 'Paste Cell Below', shortcut: 'v', category: 'cell' as const, action: cellNav.pasteBelow },
+        { id: 'move-up', label: 'Move Focus Up', shortcut: 'k / ↑', category: 'navigation' as const, action: () => cellNav.moveFocus(-1) },
+        { id: 'move-down', label: 'Move Focus Down', shortcut: 'j / ↓', category: 'navigation' as const, action: () => cellNav.moveFocus(1) },
+        { id: 'edit-mode', label: 'Enter Edit Mode', shortcut: 'Enter', category: 'navigation' as const, action: () => cellNav.setMode('edit') },
+        { id: 'command-mode', label: 'Enter Command Mode', shortcut: 'Esc', category: 'navigation' as const, action: () => cellNav.setMode('command') },
+        { id: 'toggle-toc', label: 'Toggle Table of Contents', category: 'view' as const, action: () => setShowTOC(!showTOC) },
+        { id: 'collapse-all', label: 'Collapse All Cells', category: 'view' as const, action: () => setCells(cells => cells.map(c => ({ ...c, isCollapsed: true }))) },
+        { id: 'expand-all', label: 'Expand All Cells', category: 'view' as const, action: () => setCells(cells => cells.map(c => ({ ...c, isCollapsed: false }))) },
+      ]} onClose={() => setShowCommandPalette(false)} />}
+      {showTOC && <TableOfContents cells={activeNb.cells} onScrollTo={(id) => { cellNav.focusCell(id); setTimeout(() => document.getElementById(`cell-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); }} onClose={() => setShowTOC(false)} />}
     </div>
   );
 }

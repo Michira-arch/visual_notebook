@@ -1,4 +1,5 @@
 export type CellType = 'canvas' | 'markdown' | 'code' | 'sandbox';
+export type CellMode = 'command' | 'edit';
 
 export interface Reference {
   id: string;
@@ -31,6 +32,9 @@ export interface CellData {
   sandboxCss?: string;
   sandboxJs?: string;
   sandboxAutoRun?: boolean;
+  // jupyter-style metadata
+  executionCount?: number;
+  lastRunTimestamp?: number;
 }
 
 export interface ChatMessage {
@@ -73,4 +77,12 @@ export interface ResearchArticle {
   updatedAt: number;
   sourceUrl?: string;
   abstract?: string;
+}
+
+export interface CommandAction {
+  id: string;
+  label: string;
+  shortcut?: string;
+  category: 'cell' | 'notebook' | 'navigation' | 'view';
+  action: () => void;
 }

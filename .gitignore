@@ -17,3 +17,6 @@ baileys_auth_info/
 __pycache__/
 *.pyc
 *.pyo
+
+# Go binary
+termd.exe

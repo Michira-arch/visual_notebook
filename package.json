@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite --port=3000 --host=0.0.0.0\" \"python server.py\" \"node whatsapp_service.js\" \"go run ./termd\"",
-    "termd": "go run ./termd",
-    "termd:build": "go build -o termd.exe ./termd",
+    "dev": "concurrently \"vite --port=3000 --host=0.0.0.0\" \"python server.py\" \"node whatsapp_service.js\" \"cd termd && go run .\"",
+    "termd": "cd termd && go run .",
+    "termd:build": "cd termd && go build -o ../termd.exe .",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",

@@ -279,3 +279,27 @@ export async function generateChatResponse(
 
   return result;
 }
+
+// ─── Auto-Markup ───────────────────────────────────────────────────────────
+
+const MARKUP_SYSTEM_PROMPT = `You are a precise markdown formatter. Your ONLY job is to take plain text and convert it into well-structured markdown.
+
+Rules:
+- Add headings (# ## ###) where appropriate
+- Add bullet points (-) for lists
+- Add bold (**) and italic (*) for emphasis
+- Add code blocks (\`\`\`) for any code
+- Add horizontal rules (---) for section breaks
+- Add LaTeX ($...$ or $$...$$) for any math notation
+- Do NOT add commentaries, explanations, or notes
+- Do NOT change the meaning or add new content
+- Return ONLY the markdown, no preambles or wrapping`;
+
+export async function generateMarkup(plainText: string, modelConfig: ModelConfig): Promise<string> {
+  return generateText({
+    ...modelConfig,
+    systemPrompt: MARKUP_SYSTEM_PROMPT,
+    userPrompt: `Convert this plain text to well-structured markdown:\n\n${plainText}`,
+    temperature: 0.2,
+  });
+}

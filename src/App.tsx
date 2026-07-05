@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, FileText, FileCode2, Settings, Trash2, Zap, PlaySquare, Menu, Bot, Download, Ship, Maximize2, Minimize2, List, BookOpen, ChevronDown, Plus } from 'lucide-react';
+import { Upload, FileText, FileCode2, Settings, Trash2, Zap, PlaySquare, Menu, Bot, Download, Ship, Maximize2, Minimize2, List, BookOpen, ChevronDown, Plus, Sparkles } from 'lucide-react';
 import { CellData, CellType, Reference, NotebookState, CommandAction } from './types';
 import { ModelConfig } from './providers/types';
 import { generateVisualCell, runFloodlightPlan } from './aiService';
@@ -216,6 +216,40 @@ export default function App() {
     if (cellNav.focusedCellId) runCellByType(cellNav.focusedCellId);
     cellNav.moveFocus(1);
   }, [cellNav, runCellByType]);
+
+  // Auto-markup
+  const markupCell = useCallback(async (cellId: string) => {
+    const cell = activeNb.cells.find(c => c.id === cellId);
+    if (!cell || cell.type !== 'markdown') return;
+    const text = cell.markdownContent || '';
+    if (!text.trim()) return;
+    const hashCode = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return String(h); };
+    if (hashCode(text) === cell.markupHash) return;
+    try {
+      const { generateMarkup } = await import('./aiService');
+      const marked = await generateMarkup(text, modelConfig);
+      updateCell(cellId, { markdownContent: marked, markupHash: hashCode(marked), executionCount: (cell.executionCount ?? 0) + 1, lastRunTimestamp: Date.now() });
+    } catch (err: any) { alert(err.message || 'Markup failed.'); }
+  }, [activeNb.cells, modelConfig, updateCell]);
+
+  const markupAll = useCallback(() => {
+    for (const cell of activeNb.cells) {
+      if (cell.type === 'markdown') markupCell(cell.id);
+    }
+  }, [activeNb.cells, markupCell]);
+
+  const markupAbove = useCallback(() => {
+    const idx = cellNav.focusedIndex;
+    if (idx < 0) return;
+    for (let i = 0; i <= idx; i++) {
+      if (activeNb.cells[i].type === 'markdown') markupCell(activeNb.cells[i].id);
+    }
+  }, [activeNb.cells, cellNav.focusedIndex, markupCell]);
+
+  // Markup a focused cell
+  const markupCurrent = useCallback(() => {
+    if (cellNav.focusedCellId) markupCell(cellNav.focusedCellId);
+  }, [cellNav.focusedCellId, markupCell]);
 
   // Drag and drop
   const dragCellId = useRef<string | null>(null);
@@ -471,8 +505,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] flex flex-col">
-      <header className="h-14 border-b border-[var(--border)] bg-[var(--bg2)] px-4 flex items-center justify-between sticky top-0 z-50 flex-shrink-0">
-        <div className="flex items-center gap-4">
+      <header className="h-14 border-b border-[var(--border)] bg-[var(--bg2)] px-4 flex items-center sticky top-0 z-50 flex-shrink-0 overflow-x-auto">
+        <div className="flex items-center gap-4 flex-shrink-0">
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-[var(--text-dim)] hover:text-[var(--cyan)] transition-colors"><Menu size={18} /></button>
           <div className="w-8 h-8 bg-cyan-500 rounded flex items-center justify-center"><div className="w-4 h-4 border-2 border-white rotate-45" /></div>
           {editingName
@@ -544,7 +578,7 @@ export default function App() {
             onKeyDown={handleCellsKeyDown}
             onClick={() => cellsContainerRef.current?.focus()}>
             {/* Run All toolbar */}
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
               <button onClick={runAllCells} className="flex items-center gap-1 px-3 py-1.5 rounded bg-[var(--bg2)] border border-[var(--border)] text-[10px] font-mono text-[var(--text-dim)] hover:text-white hover:border-[var(--cyan)] transition-all" title="Run All Cells">
                 <PlaySquare size={12} /> Run All
               </button>
@@ -553,6 +587,13 @@ export default function App() {
               </button>
               <button onClick={runAllBelow} className="flex items-center gap-1 px-3 py-1.5 rounded bg-[var(--bg2)] border border-[var(--border)] text-[10px] font-mono text-[var(--text-dim)] hover:text-white hover:border-[var(--cyan)] transition-all" title="Run All Below">
                 <ChevronDown size={12} /> Run Below
+              </button>
+              <div className="w-px h-4 bg-[var(--border)] mx-1" />
+              <button onClick={markupAll} className="flex items-center gap-1 px-3 py-1.5 rounded bg-[var(--bg2)] border border-[var(--border)] text-[10px] font-mono text-[var(--text-dim)] hover:text-[var(--orange)] hover:border-[var(--orange)] transition-all" title="Auto-Markup All Markdown Cells">
+                <Sparkles size={12} /> Markup All
+              </button>
+              <button onClick={markupAbove} className="flex items-center gap-1 px-3 py-1.5 rounded bg-[var(--bg2)] border border-[var(--border)] text-[10px] font-mono text-[var(--text-dim)] hover:text-[var(--orange)] hover:border-[var(--orange)] transition-all" title="Auto-Markup All Markdown Cells Above">
+                <Sparkles size={12} /> Markup Above
               </button>
               <div className="flex-1" />
               <span className="text-[9px] font-mono text-[var(--text-dim)] opacity-50">{cellNav.mode === 'command' ? 'COMMAND MODE' : 'EDIT MODE'} · {activeNb.cells.length} cells</span>
@@ -687,6 +728,9 @@ export default function App() {
         { id: 'run-all', label: 'Run All Cells', category: 'notebook' as const, action: runAllCells },
         { id: 'run-above', label: 'Run All Above', category: 'notebook' as const, action: runAllAbove },
         { id: 'run-below', label: 'Run All Below', category: 'notebook' as const, action: runAllBelow },
+        { id: 'markup-all', label: 'Auto-Markup All Markdown', shortcut: '', category: 'notebook' as const, action: markupAll },
+        { id: 'markup-above', label: 'Auto-Markup All Above', shortcut: '', category: 'notebook' as const, action: markupAbove },
+        { id: 'markup-current', label: 'Auto-Markup Current Cell', shortcut: '', category: 'cell' as const, action: markupCurrent },
         { id: 'insert-above', label: 'Insert Cell Above', shortcut: 'a', category: 'cell' as const, action: cellNav.insertAbove },
         { id: 'insert-below', label: 'Insert Cell Below', shortcut: 'b', category: 'cell' as const, action: cellNav.insertBelow },
         { id: 'delete-cell', label: 'Delete Cell', shortcut: 'dd', category: 'cell' as const, action: cellNav.deleteFocused },

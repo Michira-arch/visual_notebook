@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, Plus, Wand2, Trash2, Edit3, Type, Zap, Code2, ArrowUp, ArrowDown, Copy, GripVertical, ChevronUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, Wand2, Trash2, Edit3, Type, Zap, Code2, ArrowUp, ArrowDown, Copy, GripVertical, ChevronUp, Sparkles } from 'lucide-react';
 import { CellData, CellType, Reference, CellMode } from '../types';
 import { ModelConfig } from '../providers/types';
-import { generateVisualCell } from '../aiService';
+import { generateVisualCell, generateMarkup } from '../aiService';
 import mermaid from 'mermaid';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -42,8 +42,27 @@ export default React.memo(function CellComponent({ cell, index, allCells, refere
   onDrop: (e: React.DragEvent) => void;
 }) {
   const [prompt, setPrompt] = useState('');
+  const [isMarkingUp, setIsMarkingUp] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const cur = cell.versions?.[cell.currentVersionIndex];
+
+  const hashCode = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return String(h); };
+
+  const handleMarkup = async () => {
+    const text = cell.markdownContent || '';
+    if (!text.trim() || isMarkingUp) return;
+    const hash = hashCode(text);
+    if (hash === cell.markupHash) return;
+    setIsMarkingUp(true);
+    try {
+      const marked = await generateMarkup(text, modelConfig);
+      onUpdate(cell.id, { markdownContent: marked, markupHash: hashCode(marked), executionCount: (cell.executionCount ?? 0) + 1, lastRunTimestamp: Date.now() });
+    } catch (err: any) {
+      alert(err.message || 'Markup failed.');
+    } finally {
+      setIsMarkingUp(false);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,7 +212,12 @@ export default React.memo(function CellComponent({ cell, index, allCells, refere
               </div>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 {!cell.isCollapsed && (
-                  <button onClick={() => onUpdate(cell.id, { isEditing: !cell.isEditing })} className="text-[var(--text-dim)] hover:text-white transition-colors"><Edit3 size={14} /></button>
+                  <>
+                    <button onClick={handleMarkup} disabled={isMarkingUp} className="text-[var(--text-dim)] hover:text-[var(--orange)] transition-colors" title="Auto-Markup">
+                      {isMarkingUp ? <span className="animate-spin text-xs">⟳</span> : <Sparkles size={14} />}
+                    </button>
+                    <button onClick={() => onUpdate(cell.id, { isEditing: !cell.isEditing })} className="text-[var(--text-dim)] hover:text-white transition-colors"><Edit3 size={14} /></button>
+                  </>
                 )}
                 <button onClick={() => onRemove(cell.id)} className="text-[var(--text-dim)] hover:text-[var(--red)] transition-colors"><Trash2 size={14} /></button>
               </div>

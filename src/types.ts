@@ -23,6 +23,8 @@ export interface CellData {
   isLoading: boolean;
   // markdown cells
   markdownContent?: string;
+  // auto-markup tracking
+  markupHash?: string;
   // code cells
   codeContent?: string;
   language?: string;

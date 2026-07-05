@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { wsUrl } from '../serverClient';
+import { wsUrl, goTermdWsUrl } from '../serverClient';
 
 interface Props {
   isActive: boolean;
+  wsEndpoint?: 'python' | 'go'; // default: 'python'
   onClose?: () => void;
 }
 
@@ -13,7 +14,7 @@ export interface SingleTerminalRef {
   fit: () => void;
 }
 
-export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive }, ref) => {
+export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive, wsEndpoint = 'python' }, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const termInstance = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -23,6 +24,15 @@ export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive }
     fit: () => {
       if (fitAddonRef.current && isActive) {
         fitAddonRef.current.fit();
+        // Send resize to server (Go PTY handles this)
+        const dims = fitAddonRef.current.proposeDimensions();
+        if (dims && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            type: 'resize',
+            cols: dims.cols,
+            rows: dims.rows,
+          }));
+        }
       }
     }
   }));
@@ -44,12 +54,35 @@ export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive }
     termInstance.current = term;
     fitAddonRef.current = fitAddon;
 
-    if (isActive) fitAddon.fit();
+    if (isActive) {
+      fitAddon.fit();
+      const dims = fitAddon.proposeDimensions();
+      if (dims && wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+      }
+    }
 
-    const ws = new WebSocket(wsUrl());
+    const url = wsEndpoint === 'go' ? goTermdWsUrl() : wsUrl();
+    const ws = new WebSocket(url);
     wsRef.current = ws;
 
-    ws.onopen = () => term.writeln('\x1b[36mConnected to Python Terminal Server\x1b[0m');
+    const label = wsEndpoint === 'go' ? 'Go PTY Terminal' : 'Python Terminal';
+    ws.onopen = () => {
+      term.writeln(`\x1b[36mConnected to ${label}\x1b[0m`);
+      // Send initial size to Go PTY
+      if (wsEndpoint === 'go') {
+        setTimeout(() => {
+          if (isActive && fitAddonRef.current) {
+            fitAddonRef.current.fit();
+            const dims = fitAddonRef.current.proposeDimensions();
+            if (dims) {
+              ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+            }
+          }
+        }, 100);
+      }
+    };
+
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -62,42 +95,43 @@ export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive }
         }
       } catch (e) {}
     };
+
     ws.onclose = () => term.writeln('\x1b[31m\r\nConnection lost.\x1b[0m');
+    ws.onerror = () => term.writeln('\x1b[31m\r\nConnection error — is the server running?\x1b[0m');
     
     term.onData(data => {
       if (ws.readyState === WebSocket.OPEN) {
-        // xterm sends \r on Enter. Powershell over a pipe needs \r\n to echo
-        // a newline properly so it doesn't overwrite the same line.
         let inputData = data;
         if (data === '\r') {
           inputData = '\r\n';
         } else if (data === '\x7f') {
-          // xterm sends \x7f for backspace on most platforms.
-          // PowerShell over pipes understands \x08 (BS).
           inputData = '\x08';
         }
-        // Ctrl+C is \x03 — send it directly, the backend handles it
         ws.send(JSON.stringify({ type: 'input', data: inputData }));
       }
     });
 
     const handleResize = () => {
-      if (isActive) fitAddon.fit();
+      if (isActive) {
+        fitAddon.fit();
+        const dims = fitAddon.proposeDimensions();
+        if (dims && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+        }
+      }
     };
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      // Tell the server to terminate the terminal process before closing
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'terminate' }));
       }
       ws.close();
       term.dispose();
     };
-  }, []);
+  }, [wsEndpoint]);
 
-  // When isActive changes to true, we might need a tick to layout before fitting
   useEffect(() => {
     if (isActive && fitAddonRef.current) {
       setTimeout(() => fitAddonRef.current?.fit(), 50);

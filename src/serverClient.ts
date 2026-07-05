@@ -13,6 +13,11 @@ export function wsUrl(): string {
   return `ws://localhost:8765?token=${encodeURIComponent(TOKEN)}`;
 }
 
+/** ws://localhost:8767?token=<TOKEN> — Go PTY terminal (experimental) */
+export function goTermdWsUrl(): string {
+  return `ws://localhost:8767?token=${encodeURIComponent(TOKEN)}`;
+}
+
 /** Fetch against the HTTP API (localhost:8766) with the token header. */
 export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers as HeadersInit);

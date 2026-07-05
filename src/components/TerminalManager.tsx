@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Terminal as TerminalIcon, Plus, Maximize2, Minus, Minimize2 } from 'lucide-react';
+import { X, Terminal as TerminalIcon, Plus, Maximize2, Minus, Minimize2, TestTube } from 'lucide-react';
 import { SingleTerminal, SingleTerminalRef } from './SingleTerminal';
 
 interface TerminalSession {
   id: string;
   name: string;
+  backend: 'python' | 'go';
 }
 
 interface Props {
@@ -35,9 +36,10 @@ export default function TerminalManager({ isOpen, onClose }: Props) {
     if (viewState === 'closed' && isOpen) onClose();
   }, [viewState]);
 
-  const handleAddSession = () => {
+  const handleAddSession = (backend: 'python' | 'go' = 'python') => {
     const id = Math.random().toString(36).substr(2, 9);
-    setSessions(prev => [...prev, { id, name: `Terminal ${prev.length + 1}` }]);
+    const prefix = backend === 'go' ? 'Go' : 'Terminal';
+    setSessions(prev => [...prev, { id, name: `${prefix} ${prev.length + 1}`, backend }]);
     setActiveId(id);
     if (viewState === 'minimized') setViewState('normal');
   };
@@ -89,14 +91,18 @@ export default function TerminalManager({ isOpen, onClose }: Props) {
                 className={`flex items-center gap-2 px-4 h-full border-r border-[var(--border)] cursor-pointer select-none min-w-[120px] max-w-[200px] group transition-colors ${activeId === s.id ? 'bg-[var(--bg2)] border-t-2 border-t-[var(--cyan)]' : 'hover:bg-[var(--bg2)]'}`}
               >
                 <TerminalIcon size={12} className={activeId === s.id ? 'text-[var(--cyan)]' : 'text-[var(--text-dim)]'} />
+                {s.backend === 'go' && <TestTube size={10} className="text-[var(--orange)] opacity-60" />}
                 <span className={`text-xs font-mono truncate ${activeId === s.id ? 'text-white' : 'text-[var(--text-dim)]'}`}>{s.name}</span>
                 <button onClick={(e) => handleRemoveSession(s.id, e)} className="ml-auto opacity-0 group-hover:opacity-100 text-[var(--text-dim)] hover:text-[var(--red)] transition-all">
                   <X size={12} />
                 </button>
               </div>
             ))}
-            <button onClick={handleAddSession} className="px-3 h-full flex items-center justify-center text-[var(--text-dim)] hover:text-white hover:bg-[var(--bg2)] transition-colors border-r border-[var(--border)]">
+            <button onClick={() => handleAddSession('python')} className="px-3 h-full flex items-center justify-center text-[var(--text-dim)] hover:text-white hover:bg-[var(--bg2)] transition-colors border-r border-[var(--border)]">
               <Plus size={14} />
+            </button>
+            <button onClick={() => handleAddSession('go')} className="px-3 h-full flex items-center justify-center text-[var(--orange)]/50 hover:text-[var(--orange)] hover:bg-[var(--bg2)] transition-colors border-r border-[var(--border)]" title="Go PTY Terminal (experimental)">
+              <TestTube size={14} />
             </button>
           </div>
 
@@ -120,13 +126,18 @@ export default function TerminalManager({ isOpen, onClose }: Props) {
             <div className="absolute inset-0 flex flex-col items-center justify-center text-[var(--text-dim)]">
               <TerminalIcon size={32} className="mb-2 opacity-50" />
               <p className="text-xs font-mono">No active terminal sessions.</p>
-              <button onClick={handleAddSession} className="mt-4 px-4 py-1.5 bg-[var(--cyan)]/10 text-[var(--cyan)] rounded hover:bg-[var(--cyan)]/20 transition-colors text-xs font-mono flex items-center gap-2">
-                <Plus size={12} /> New Session
-              </button>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => handleAddSession('python')} className="px-4 py-1.5 bg-[var(--cyan)]/10 text-[var(--cyan)] rounded hover:bg-[var(--cyan)]/20 transition-colors text-xs font-mono flex items-center gap-2">
+                  <Plus size={12} /> Python
+                </button>
+                <button onClick={() => handleAddSession('go')} className="px-4 py-1.5 bg-[var(--orange)]/10 text-[var(--orange)] rounded hover:bg-[var(--orange)]/20 transition-colors text-xs font-mono flex items-center gap-2">
+                  <TestTube size={12} /> Go PTY
+                </button>
+              </div>
             </div>
           ) : (
             sessions.map(s => (
-              <SingleTerminal key={s.id} isActive={activeId === s.id} />
+              <SingleTerminal key={s.id} isActive={activeId === s.id} wsEndpoint={s.backend} />
             ))
           )}
         </div>

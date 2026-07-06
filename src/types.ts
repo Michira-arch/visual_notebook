@@ -29,6 +29,10 @@ export interface CellData {
   codeContent?: string;
   language?: string;
   isCollapsed?: boolean;
+  // language auto-inference & overrides
+  detectedLanguage?: string;
+  languageOverride?: string;
+  detectedConfidence?: number;
   // sandbox cells (live HTML/CSS/JS)
   sandboxHtml?: string;
   sandboxCss?: string;

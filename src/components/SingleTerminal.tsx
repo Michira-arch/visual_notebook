@@ -14,7 +14,7 @@ export interface SingleTerminalRef {
   fit: () => void;
 }
 
-export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive, wsEndpoint = 'python' }, ref) => {
+export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive, wsEndpoint = 'go' }, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const termInstance = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -62,15 +62,15 @@ export const SingleTerminal = forwardRef<SingleTerminalRef, Props>(({ isActive, 
       }
     }
 
-    const url = wsEndpoint === 'go' ? goTermdWsUrl() : wsUrl();
+    const url = wsEndpoint === 'python' ? wsUrl() : goTermdWsUrl();
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
-    const label = wsEndpoint === 'go' ? 'Go PTY Terminal' : 'Python Terminal';
+    const label = wsEndpoint === 'python' ? 'Python Terminal (Deprecated)' : 'Go PTY Terminal';
     ws.onopen = () => {
       term.writeln(`\x1b[36mConnected to ${label}\x1b[0m`);
       // Send initial size to Go PTY
-      if (wsEndpoint === 'go') {
+      if (wsEndpoint !== 'python') {
         setTimeout(() => {
           if (isActive && fitAddonRef.current) {
             fitAddonRef.current.fit();

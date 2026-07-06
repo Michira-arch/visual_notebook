@@ -1,29 +1,103 @@
-import React, { useState, useRef } from 'react';
-import { Copy, Check, ChevronDown, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Copy, Check, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import CodeMirrorEditor from './CodeMirrorEditor';
+import { detectLanguage } from '../engine/languageInference';
 
-const LANGUAGES = ['plaintext', 'python', 'javascript', 'typescript', 'rust', 'go', 'java', 'c', 'cpp', 'sql', 'bash', 'json', 'yaml', 'html', 'css', 'markdown'];
+const LANGUAGES = [
+  'plaintext', 'python', 'javascript', 'typescript', 'rust', 'go',
+  'java', 'c', 'cpp', 'sql', 'bash', 'json', 'yaml', 'html', 'css', 'markdown'
+];
 
 interface Props {
   id: string;
   codeContent: string;
   language: string;
+  languageOverride?: string;
+  detectedLanguage?: string;
+  detectedConfidence?: number;
   isCollapsed?: boolean;
   executionCount?: number;
-  onUpdate: (code: string, lang: string) => void;
+  onUpdate: (
+    code: string,
+    lang: string,
+    detectedLang?: string,
+    detectedConf?: number,
+    langOverride?: string
+  ) => void;
   onToggleCollapse: () => void;
   onRemove: () => void;
   onShiftEnter?: () => void;
 }
 
-export default function CodeCell({ id, codeContent, language, isCollapsed, executionCount, onUpdate, onToggleCollapse, onRemove, onShiftEnter }: Props) {
+export default function CodeCell({
+  id,
+  codeContent,
+  language,
+  languageOverride,
+  detectedLanguage,
+  detectedConfidence,
+  isCollapsed,
+  executionCount,
+  onUpdate,
+  onToggleCollapse,
+  onRemove,
+  onShiftEnter
+}: Props) {
   const [copied, setCopied] = useState(false);
-  const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close language menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [menuOpen]);
+
+  // Run language inference on change
+  const handleCodeChange = (newCode: string) => {
+    // If there is an override, stick to the override. Otherwise, auto-detect
+    if (languageOverride) {
+      onUpdate(newCode, languageOverride, detectedLanguage, detectedConfidence, languageOverride);
+    } else {
+      const result = detectLanguage(newCode);
+      onUpdate(newCode, result.language, result.language, result.confidence, undefined);
+    }
+  };
+
+  const selectLanguage = (lang: string, isOverride: boolean) => {
+    if (isOverride) {
+      onUpdate(codeContent, lang, detectedLanguage, detectedConfidence, lang);
+    } else {
+      // Re-enable auto detect
+      const result = detectLanguage(codeContent);
+      onUpdate(codeContent, result.language, result.language, result.confidence, undefined);
+    }
+    setMenuOpen(false);
+  };
 
   const copy = async () => {
     await navigator.clipboard.writeText(codeContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // Filter languages for the search dropdown
+  const filteredLanguages = LANGUAGES.filter(l =>
+    l.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const displayLang = languageOverride || language || 'plaintext';
+  const displayConfidence = languageOverride ? null : detectedConfidence;
 
   return (
     <div className={`relative border border-[var(--border)] bg-[var(--bg2)] rounded shadow-xl overflow-hidden mb-4 transition-all hover:border-[var(--purple)]/50 group ${isCollapsed ? 'mb-2' : 'mb-8'}`}>
@@ -37,25 +111,73 @@ export default function CodeCell({ id, codeContent, language, isCollapsed, execu
             {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
           </button>
           
-          {/* lang badge */}
+          {/* cell badge */}
           <span className="font-mono text-[10px] tracking-widest text-[var(--purple)] uppercase flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-[var(--purple)] opacity-70" />
             Code {id.slice(0, 4)}
           </span>
+          
           {executionCount !== undefined && (
             <span className="font-mono text-[10px] text-[var(--text-dim)]">In [{executionCount}]</span>
           )}
 
           {!isCollapsed && (
-            <div className="relative">
-              <select
-                value={language}
-                onChange={e => onUpdate(codeContent, e.target.value)}
-                className="appearance-none bg-[var(--bg)] border border-[var(--border)] text-[var(--text-dim)] text-[10px] font-mono rounded px-2 py-0.5 pr-5 outline-none hover:border-[var(--border2)] focus:border-[var(--purple)] transition-colors cursor-pointer"
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen(!menuOpen)}
+                className="flex items-center gap-1.5 bg-[var(--bg)] border border-[var(--border)] hover:border-[var(--border2)] text-[var(--text-dim)] hover:text-[var(--text)] text-[10px] font-mono rounded px-2.5 py-0.5 outline-none transition-colors cursor-pointer"
               >
-                {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
-              <ChevronDown size={8} className="absolute right-1 top-1/2 -translate-y-1/2 text-[var(--text-dim)] pointer-events-none" />
+                <span>{displayLang}</span>
+                {displayConfidence !== undefined && displayConfidence !== null && (
+                  <span className="text-[var(--cyan)] opacity-80">{displayConfidence}%</span>
+                )}
+                {languageOverride && (
+                  <span className="text-[var(--orange)] opacity-80">(edited)</span>
+                )}
+                <ChevronDown size={10} className="opacity-60" />
+              </button>
+
+              {/* Clean custom language list popover */}
+              {menuOpen && (
+                <div className="absolute left-0 mt-1 w-48 bg-[var(--bg)] border border-[var(--border)] rounded-md shadow-2xl z-50 py-1 overflow-hidden">
+                  <div className="px-2 py-1.5 border-b border-[var(--border)]">
+                    <input
+                      type="text"
+                      placeholder="Search language..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="w-full bg-[var(--bg2)] border border-[var(--border)] rounded text-[11px] px-2 py-1 outline-none text-white font-mono placeholder-[var(--text-dim)]/60"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto font-mono text-[11px]">
+                    {languageOverride && (
+                      <button
+                        onClick={() => selectLanguage('', false)}
+                        className="w-full text-left px-3 py-1.5 text-[var(--cyan)] hover:bg-[var(--border)] flex items-center justify-between"
+                      >
+                        <span>Reset Auto-Detect</span>
+                        <Sparkles size={10} />
+                      </button>
+                    )}
+                    {filteredLanguages.map(l => (
+                      <button
+                        key={l}
+                        onClick={() => selectLanguage(l, true)}
+                        className={`w-full text-left px-3 py-1.5 hover:bg-[var(--border)] flex items-center justify-between ${
+                          l === displayLang ? 'text-[var(--purple)] bg-[var(--border)]/30' : 'text-[var(--text-dim)] hover:text-[var(--text)]'
+                        }`}
+                      >
+                        <span>{l}</span>
+                        {l === displayLang && <Check size={10} />}
+                      </button>
+                    ))}
+                    {filteredLanguages.length === 0 && (
+                      <div className="px-3 py-1.5 text-[var(--text-dim)] italic">No matches</div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           
@@ -81,61 +203,22 @@ export default function CodeCell({ id, codeContent, language, isCollapsed, execu
       {!isCollapsed && (
         <>
           {/* Editor area */}
-          <div className="relative bg-black/40 resize-y overflow-hidden min-h-[180px]" style={{ height: '240px' }}>
-            {/* Line numbers */}
-            <div className="flex h-full">
-              <div 
-                ref={lineNumbersRef}
-                className="flex-shrink-0 w-10 bg-black/20 border-r border-[var(--border)] py-4 select-none overflow-hidden"
-              >
-                {(codeContent || '').split('\n').map((_, i) => (
-                  <div key={i} className="text-[var(--text-dim)] text-xs font-mono text-right pr-2 leading-6 opacity-40">
-                    {i + 1}
-                  </div>
-                ))}
-              </div>
-              <textarea
-                value={codeContent}
-                onChange={e => onUpdate(e.target.value, language)}
-                onScroll={e => {
-                  if (lineNumbersRef.current) {
-                    lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
-                  }
-                }}
-                placeholder={`// Write your ${language} code here...`}
-                spellCheck={false}
-                className="flex-1 h-full bg-transparent resize-none outline-none text-[var(--cyan)] font-mono text-sm leading-6 p-4 placeholder-[var(--text-dim)]/40 overflow-auto"
-                style={{ tabSize: 2 }}
-                onKeyDown={e => {
-                  // Insert tab as spaces
-                  if (e.key === 'Tab') {
-                    e.preventDefault();
-                    const start = e.currentTarget.selectionStart;
-                    const end = e.currentTarget.selectionEnd;
-                    const newVal = codeContent.substring(0, start) + '  ' + codeContent.substring(end);
-                    onUpdate(newVal, language);
-                    // Restore cursor position after state update
-                    requestAnimationFrame(() => {
-                      e.currentTarget.selectionStart = start + 2;
-                      e.currentTarget.selectionEnd = start + 2;
-                    });
-                  }
-                  if (e.key === 'Enter' && e.shiftKey && onShiftEnter) {
-                    e.preventDefault();
-                    onShiftEnter();
-                  }
-                }}
-              />
-            </div>
+          <div className="relative bg-black/20 overflow-hidden min-h-[180px] p-1">
+            <CodeMirrorEditor
+              code={codeContent}
+              language={displayLang}
+              onChange={handleCodeChange}
+              onExecute={onShiftEnter}
+            />
           </div>
 
           {/* Footer */}
-          <div className="px-4 py-2 border-t border-[var(--border)] bg-[var(--bg2)] flex items-center gap-2">
+          <div className="px-4 py-1.5 border-t border-[var(--border)] bg-[var(--bg2)] flex items-center justify-between">
             <span className="text-[10px] font-mono text-[var(--text-dim)]">
               {(codeContent || '').split('\n').length} lines · {(codeContent || '').length} chars
             </span>
-            <span className="text-[10px] font-mono text-[var(--text-dim)] ml-auto opacity-60">
-              Tab inserts 2 spaces
+            <span className="text-[10px] font-mono text-[var(--text-dim)] opacity-60">
+              Shift+Enter to run
             </span>
           </div>
         </>

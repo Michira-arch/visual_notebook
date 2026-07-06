@@ -119,116 +119,6 @@ def _origin_ok(websocket) -> bool:
     return "localhost" in origin or "127.0.0.1" in origin
 
 # ---------------------------------------------------------------------------
-# Terminal session — uses a PowerShell subprocess with proper signal handling
-# ---------------------------------------------------------------------------
-class TerminalSession:
-    def __init__(self, websocket):
-        self.ws = websocket
-        self.process = None
-        self.loop = asyncio.get_event_loop()
-        self._dead = False
-
-    def start(self):
-        # Do NOT use CREATE_NEW_PROCESS_GROUP — it prevents Ctrl+C propagation.
-        # Instead, run powershell in a normal process group so GenerateConsoleCtrlEvent works.
-        self.process = subprocess.Popen(
-            ["powershell.exe", "-NoProfile", "-NoLogo"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            bufsize=0,
-            text=False,
-        )
-        self.thread = threading.Thread(target=self.read_output, daemon=True)
-        self.thread.start()
-
-    def read_output(self):
-        try:
-            while not self._dead:
-                chunk = self.process.stdout.read(1024)
-                if not chunk:
-                    break
-                text = chunk.decode('utf-8', errors='replace')
-                try:
-                    asyncio.run_coroutine_threadsafe(
-                        self.ws.send(json.dumps({"type": "output", "data": text})),
-                        self.loop
-                    )
-                except Exception:
-                    break
-        except Exception as e:
-            if not self._dead:
-                print(f"Error reading output: {e}")
-        finally:
-            if not self._dead:
-                try:
-                    asyncio.run_coroutine_threadsafe(
-                        self.ws.send(json.dumps({"type": "exit"})),
-                        self.loop
-                    )
-                except Exception:
-                    pass
-
-    def write_input(self, data):
-        if self._dead or not self.process or not self.process.stdin:
-            return
-        try:
-            if data == '\x03':  # Ctrl+C
-                # Send a 'taskkill' of the foreground process tree.
-                # Since we can't use CTRL_C_EVENT reliably with piped stdin,
-                # we write the Ctrl+C character directly to PowerShell's stdin.
-                # PowerShell will interpret it as a cancel of the current pipeline.
-                self.process.stdin.write(b'\x03')
-                self.process.stdin.flush()
-            else:
-                self.process.stdin.write(data.encode('utf-8'))
-                self.process.stdin.flush()
-        except (BrokenPipeError, OSError):
-            self._dead = True
-
-    def terminate(self):
-        self._dead = True
-        if self.process:
-            try:
-                # Kill the entire process tree so child processes don't linger
-                if os.name == 'nt':
-                    subprocess.run(
-                        ['taskkill', '/F', '/T', '/PID', str(self.process.pid)],
-                        capture_output=True
-                    )
-                else:
-                    self.process.terminate()
-            except Exception:
-                pass
-            try:
-                self.process.stdin.close()
-            except Exception:
-                pass
-
-# ---------------------------------------------------------------------------
-# Connection types — separate terminals from lightweight WS clients
-# ---------------------------------------------------------------------------
-# Not every connection needs a terminal (e.g. AgentChat opening a WS just
-# to send a whatsapp message). We only spawn a terminal when the client
-# sends its first "input" message.
-
-class ClientConnection:
-    """Tracks a single WS client, optionally with a terminal session."""
-    def __init__(self, websocket):
-        self.ws = websocket
-        self.terminal: TerminalSession | None = None
-
-    def ensure_terminal(self):
-        if not self.terminal:
-            self.terminal = TerminalSession(self.ws)
-            self.terminal.start()
-        return self.terminal
-
-    def terminate(self):
-        if self.terminal:
-            self.terminal.terminate()
-
-# ---------------------------------------------------------------------------
 # WebSocket handler
 # ---------------------------------------------------------------------------
 async def handler(websocket):
@@ -244,7 +134,6 @@ async def handler(websocket):
         await websocket.close(1008, "Forbidden: invalid token")
         return
 
-    client = ClientConnection(websocket)
     connected_clients.add(websocket)
 
     try:
@@ -252,12 +141,7 @@ async def handler(websocket):
             data = json.loads(message)
             msg_type = data.get("type", "")
 
-            if msg_type == "input":
-                # Lazy-init: only spawn a terminal when a terminal tab actually sends input
-                term = client.ensure_terminal()
-                term.write_input(data.get("data", ""))
-
-            elif msg_type == "agent_execute":
+            if msg_type == "agent_execute":
                 cmd = data.get("command", "")
                 request_id = data.get("id", "none")
 
@@ -326,7 +210,6 @@ async def handler(websocket):
         pass
     finally:
         connected_clients.discard(websocket)
-        client.terminate()
 
 # ---------------------------------------------------------------------------
 # HTTP API

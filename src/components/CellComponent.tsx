@@ -167,9 +167,24 @@ export default React.memo(function CellComponent({ cell, index, allCells, refere
           )}
         </div>
         <div className="flex-1 min-w-0 relative">
-          <CodeCell id={cell.id} codeContent={cell.codeContent || ''} language={cell.language || 'plaintext'}
-            isCollapsed={cell.isCollapsed} executionCount={cell.executionCount}
-            onUpdate={(code, lang) => onUpdate(cell.id, { codeContent: code, language: lang })}
+          <CodeCell 
+            id={cell.id} 
+            codeContent={cell.codeContent || ''} 
+            language={cell.language || 'plaintext'}
+            languageOverride={cell.languageOverride}
+            detectedLanguage={cell.detectedLanguage}
+            detectedConfidence={cell.detectedConfidence}
+            isCollapsed={cell.isCollapsed} 
+            executionCount={cell.executionCount}
+            onUpdate={(code, lang, detectedLang, detectedConf, langOverride) => 
+              onUpdate(cell.id, { 
+                codeContent: code, 
+                language: lang, 
+                detectedLanguage: detectedLang, 
+                detectedConfidence: detectedConf, 
+                languageOverride: langOverride 
+              })
+            }
             onToggleCollapse={() => onUpdate(cell.id, { isCollapsed: !cell.isCollapsed })}
             onRemove={() => onRemove(cell.id)}
             onShiftEnter={handleRunAndNext}

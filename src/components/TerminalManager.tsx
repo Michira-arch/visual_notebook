@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Terminal as TerminalIcon, Plus, Maximize2, Minus, Minimize2, TestTube } from 'lucide-react';
-import { SingleTerminal, SingleTerminalRef } from './SingleTerminal';
+import React, { useState, useEffect } from 'react';
+import { X, Terminal as TerminalIcon, Plus, Maximize2, Minus, Minimize2 } from 'lucide-react';
+import { SingleTerminal } from './SingleTerminal';
 
 interface TerminalSession {
   id: string;
@@ -24,7 +24,7 @@ export default function TerminalManager({ isOpen, onClose }: Props) {
     if (isOpen && viewState === 'closed') {
       setViewState('normal');
       if (sessions.length === 0) {
-        handleAddSession();
+        handleAddSession('go');
       }
     } else if (!isOpen && viewState !== 'closed') {
       setViewState('closed');
@@ -36,9 +36,9 @@ export default function TerminalManager({ isOpen, onClose }: Props) {
     if (viewState === 'closed' && isOpen) onClose();
   }, [viewState]);
 
-  const handleAddSession = (backend: 'python' | 'go' = 'python') => {
+  const handleAddSession = (backend: 'python' | 'go' = 'go') => {
     const id = Math.random().toString(36).substr(2, 9);
-    const prefix = backend === 'go' ? 'Go' : 'Terminal';
+    const prefix = backend === 'go' ? 'Terminal' : 'Python Terminal';
     setSessions(prev => [...prev, { id, name: `${prefix} ${prev.length + 1}`, backend }]);
     setActiveId(id);
     if (viewState === 'minimized') setViewState('normal');
@@ -55,8 +55,6 @@ export default function TerminalManager({ isOpen, onClose }: Props) {
     });
   };
 
-  // If viewState === 'closed', we just hide the entire container, but we do NOT unmount.
-  // Unmounting would kill the background processes.
   const isMaximized = viewState === 'maximized';
   const isMinimized = viewState === 'minimized';
   const isClosed = viewState === 'closed';
@@ -91,18 +89,14 @@ export default function TerminalManager({ isOpen, onClose }: Props) {
                 className={`flex items-center gap-2 px-4 h-full border-r border-[var(--border)] cursor-pointer select-none min-w-[120px] max-w-[200px] group transition-colors ${activeId === s.id ? 'bg-[var(--bg2)] border-t-2 border-t-[var(--cyan)]' : 'hover:bg-[var(--bg2)]'}`}
               >
                 <TerminalIcon size={12} className={activeId === s.id ? 'text-[var(--cyan)]' : 'text-[var(--text-dim)]'} />
-                {s.backend === 'go' && <TestTube size={10} className="text-[var(--orange)] opacity-60" />}
                 <span className={`text-xs font-mono truncate ${activeId === s.id ? 'text-white' : 'text-[var(--text-dim)]'}`}>{s.name}</span>
                 <button onClick={(e) => handleRemoveSession(s.id, e)} className="ml-auto opacity-0 group-hover:opacity-100 text-[var(--text-dim)] hover:text-[var(--red)] transition-all">
                   <X size={12} />
                 </button>
               </div>
             ))}
-            <button onClick={() => handleAddSession('python')} className="px-3 h-full flex items-center justify-center text-[var(--text-dim)] hover:text-white hover:bg-[var(--bg2)] transition-colors border-r border-[var(--border)]">
+            <button onClick={() => handleAddSession('go')} className="px-3 h-full flex items-center justify-center text-[var(--text-dim)] hover:text-white hover:bg-[var(--bg2)] transition-colors border-r border-[var(--border)]" title="Add Go PTY Terminal">
               <Plus size={14} />
-            </button>
-            <button onClick={() => handleAddSession('go')} className="px-3 h-full flex items-center justify-center text-[var(--orange)]/50 hover:text-[var(--orange)] hover:bg-[var(--bg2)] transition-colors border-r border-[var(--border)]" title="Go PTY Terminal (experimental)">
-              <TestTube size={14} />
             </button>
           </div>
 
@@ -127,11 +121,8 @@ export default function TerminalManager({ isOpen, onClose }: Props) {
               <TerminalIcon size={32} className="mb-2 opacity-50" />
               <p className="text-xs font-mono">No active terminal sessions.</p>
               <div className="flex gap-2 mt-4">
-                <button onClick={() => handleAddSession('python')} className="px-4 py-1.5 bg-[var(--cyan)]/10 text-[var(--cyan)] rounded hover:bg-[var(--cyan)]/20 transition-colors text-xs font-mono flex items-center gap-2">
-                  <Plus size={12} /> Python
-                </button>
-                <button onClick={() => handleAddSession('go')} className="px-4 py-1.5 bg-[var(--orange)]/10 text-[var(--orange)] rounded hover:bg-[var(--orange)]/20 transition-colors text-xs font-mono flex items-center gap-2">
-                  <TestTube size={12} /> Go PTY
+                <button onClick={() => handleAddSession('go')} className="px-4 py-1.5 bg-[var(--cyan)]/10 text-[var(--cyan)] rounded hover:bg-[var(--cyan)]/20 transition-colors text-xs font-mono flex items-center gap-2">
+                  <Plus size={12} /> Add Terminal
                 </button>
               </div>
             </div>

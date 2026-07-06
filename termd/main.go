@@ -41,10 +41,15 @@ var (
 )
 
 type wsMessage struct {
-	Type string `json:"type"`
-	Data string `json:"data"`
-	Cols int    `json:"cols"`
-	Rows int    `json:"rows"`
+	Type     string         `json:"type"`
+	Data     string         `json:"data"`
+	Cols     int            `json:"cols"`
+	Rows     int            `json:"rows"`
+	CellID   string         `json:"cellId,omitempty"`
+	Language string         `json:"language,omitempty"`
+	Code     string         `json:"code,omitempty"`
+	Registry map[string]any `json:"registry,omitempty"`
+	Timeout  int            `json:"timeout,omitempty"`
 }
 
 type outputMessage struct {
@@ -102,13 +107,20 @@ func main() {
 func handleSession(conn *websocket.Conn) {
 	defer conn.Close()
 
+	var writeMu sync.Mutex
+	writeMsg := func(messageType int, data []byte) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return conn.WriteMessage(messageType, data)
+	}
+
 	sess := newSession()
 	sess.start(conn)
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		sess.readOutput(conn)
+		sess.readOutput(writeMsg)
 	}()
 
 	for {
@@ -129,6 +141,29 @@ func handleSession(conn *websocket.Conn) {
 		case "terminate":
 			sess.kill()
 			return
+		case "execute_code":
+			go func(m wsMessage) {
+				req := ExecuteRequest{
+					CellID:   m.CellID,
+					Language: m.Language,
+					Code:     m.Code,
+					Registry: m.Registry,
+					Timeout:  m.Timeout,
+				}
+				res := ExecuteCode(req)
+				resBytes, _ := json.Marshal(res)
+				writeMsg(websocket.TextMessage, resBytes)
+			}(msg)
+		case "detect_compilers":
+			go func() {
+				compilers := DetectCompilers()
+				res := map[string]any{
+					"type":      "compilers_result",
+					"compilers": compilers,
+				}
+				resBytes, _ := json.Marshal(res)
+				writeMsg(websocket.TextMessage, resBytes)
+			}()
 		}
 	}
 

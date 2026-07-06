@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Copy, Check, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import CodeMirrorEditor from './CodeMirrorEditor';
 import { detectLanguage } from '../engine/languageInference';
+import CellOutput from './CellOutput';
+import { ExecutionResult } from '../types';
 
 const LANGUAGES = [
   'plaintext', 'python', 'javascript', 'typescript', 'rust', 'go',
@@ -17,6 +19,8 @@ interface Props {
   detectedConfidence?: number;
   isCollapsed?: boolean;
   executionCount?: number;
+  executionResult?: ExecutionResult;
+  isExecuting?: boolean;
   onUpdate: (
     code: string,
     lang: string,
@@ -38,6 +42,8 @@ export default function CodeCell({
   detectedConfidence,
   isCollapsed,
   executionCount,
+  executionResult,
+  isExecuting,
   onUpdate,
   onToggleCollapse,
   onRemove,
@@ -221,6 +227,8 @@ export default function CodeCell({
               Shift+Enter to run
             </span>
           </div>
+
+          <CellOutput result={executionResult} isExecuting={isExecuting} />
         </>
       )}
     </div>

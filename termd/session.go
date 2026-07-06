@@ -44,7 +44,7 @@ func (s *session) resize(cols, rows int) {
 	s.pty.Resize(cols, rows)
 }
 
-func (s *session) readOutput(conn *websocket.Conn) {
+func (s *session) readOutput(writeMsg func(msgType int, data []byte) error) {
 	buf := make([]byte, 4096)
 	for {
 		n, err := s.pty.Read(buf)
@@ -56,12 +56,12 @@ func (s *session) readOutput(conn *websocket.Conn) {
 				Type: "output",
 				Data: string(buf[:n]),
 			})
-			conn.WriteMessage(websocket.TextMessage, msg)
+			writeMsg(websocket.TextMessage, msg)
 		}
 	}
 	// Send exit signal
 	msg, _ := json.Marshal(outputMessage{
 		Type: "exit",
 	})
-	conn.WriteMessage(websocket.TextMessage, msg)
+	writeMsg(websocket.TextMessage, msg)
 }

@@ -33,6 +33,9 @@ export interface CellData {
   detectedLanguage?: string;
   languageOverride?: string;
   detectedConfidence?: number;
+  // execution results
+  isExecuting?: boolean;
+  executionResult?: ExecutionResult;
   // sandbox cells (live HTML/CSS/JS)
   sandboxHtml?: string;
   sandboxCss?: string;
@@ -41,6 +44,16 @@ export interface CellData {
   // jupyter-style metadata
   executionCount?: number;
   lastRunTimestamp?: number;
+}
+
+export interface ExecutionResult {
+  status: 'success' | 'error' | 'timeout' | 'no-compiler';
+  tier: 'browser' | 'local' | 'remote';
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  duration: number; // ms
+  outputs: Record<string, any>;
 }
 
 export interface ChatMessage {

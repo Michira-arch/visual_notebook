@@ -176,6 +176,8 @@ export default React.memo(function CellComponent({ cell, index, allCells, refere
             detectedConfidence={cell.detectedConfidence}
             isCollapsed={cell.isCollapsed} 
             executionCount={cell.executionCount}
+            executionResult={cell.executionResult}
+            isExecuting={cell.isExecuting}
             onUpdate={(code, lang, detectedLang, detectedConf, langOverride) => 
               onUpdate(cell.id, { 
                 codeContent: code, 

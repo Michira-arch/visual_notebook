@@ -24,6 +24,8 @@ import CommandPalette from './components/CommandPalette';
 import TableOfContents from './components/TableOfContents';
 import { Terminal as TerminalIcon, GraduationCap } from 'lucide-react';
 import 'katex/dist/katex.min.css';
+import { executeCellCode } from './engine/executionEngine';
+import { executionClient } from './engine/executionClient';
 
 const GEMINI_ENV_KEY = process.env.GEMINI_API_KEY || '';
 function mkId() { return Math.random().toString(36).substr(2, 9); }
@@ -43,6 +45,15 @@ export default function App() {
   
   const [activeNbId, setActiveNbId] = useState<string>(() => getActiveNotebookId() || notebooks[0].id);
   const activeNb = notebooks.find(n => n.id === activeNbId) || notebooks[0];
+  const [registry, setRegistry] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    executionClient.detectCompilers().then(compilers => {
+      console.log('Available compilers on system PATH:', compilers);
+    }).catch(err => {
+      console.warn('Failed to detect compilers on load', err);
+    });
+  }, []);
 
   // Recovery mechanism: If the browser's localStorage is wiped, pull from the Python DB
   useEffect(() => {
@@ -190,11 +201,37 @@ export default function App() {
     if (cell.type === 'markdown') {
       updateCell(cellId, { isEditing: false, executionCount: (cell.executionCount ?? 0) + 1, lastRunTimestamp: Date.now() });
     } else if (cell.type === 'code') {
-      updateCell(cellId, { executionCount: (cell.executionCount ?? 0) + 1, lastRunTimestamp: Date.now() });
+      updateCell(cellId, { isExecuting: true });
+      executeCellCode(cellId, cell.language || 'plaintext', cell.codeContent || '', registry)
+        .then(res => {
+          updateCell(cellId, {
+            isExecuting: false,
+            executionCount: (cell.executionCount ?? 0) + 1,
+            lastRunTimestamp: Date.now(),
+            executionResult: res
+          });
+          if (res.outputs && Object.keys(res.outputs).length > 0) {
+            setRegistry(prev => ({ ...prev, ...res.outputs }));
+          }
+        })
+        .catch(err => {
+          updateCell(cellId, {
+            isExecuting: false,
+            executionResult: {
+              status: 'error',
+              tier: 'browser',
+              stdout: '',
+              stderr: String(err),
+              exitCode: -1,
+              duration: 0,
+              outputs: {}
+            }
+          });
+        });
     } else if (cell.type === 'sandbox') {
       updateCell(cellId, { executionCount: (cell.executionCount ?? 0) + 1, lastRunTimestamp: Date.now() });
     }
-  }, [activeNb.cells, updateCell]);
+  }, [activeNb.cells, updateCell, registry]);
 
   const runAllCells = useCallback(() => {
     for (const cell of activeNb.cells) runCellByType(cell.id);

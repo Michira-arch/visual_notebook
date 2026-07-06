@@ -34,7 +34,19 @@ interface Props {
 export default function CodeMirrorEditor({ code, language, onChange, onExecute, readOnly = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const codeRef = useRef<string>(code); // Track code without triggering effect loop
+  const codeRef = useRef<string>(code);
+
+  // Keep callback refs updated to prevent editor re-initialization
+  const onExecuteRef = useRef(onExecute);
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    onExecuteRef.current = onExecute;
+  }, [onExecute]);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   // Keep track of current code so we don't dispatch when code matches
   useEffect(() => {
@@ -146,15 +158,13 @@ export default function CodeMirrorEditor({ code, language, onChange, onExecute, 
 
     // Keybindings: intercept Shift+Enter for Execution
     const customKeys = [];
-    if (onExecute) {
-      customKeys.push({
-        key: 'Shift-Enter',
-        run: () => {
-          onExecute();
-          return true;
-        }
-      });
-    }
+    customKeys.push({
+      key: 'Shift-Enter',
+      run: () => {
+        onExecuteRef.current?.();
+        return true;
+      }
+    });
 
     const state = EditorState.create({
       doc: codeRef.current,
@@ -182,7 +192,7 @@ export default function CodeMirrorEditor({ code, language, onChange, onExecute, 
           if (update.docChanged) {
             const newDoc = update.state.doc.toString();
             codeRef.current = newDoc;
-            onChange(newDoc);
+            onChangeRef.current(newDoc);
           }
         }),
         EditorState.readOnly.of(readOnly)
@@ -200,7 +210,7 @@ export default function CodeMirrorEditor({ code, language, onChange, onExecute, 
       view.destroy();
       viewRef.current = null;
     };
-  }, [onExecute, readOnly]);
+  }, [readOnly]);
 
   return (
     <div 

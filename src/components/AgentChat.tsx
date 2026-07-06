@@ -370,7 +370,10 @@ export default React.memo(function AgentChat({ allCells, references, modelConfig
   const isResizing = useRef(false);
 
   const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
     isResizing.current = true;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ew-resize';
     document.addEventListener('mousemove', resize);
     document.addEventListener('mouseup', stopResizing);
   }, [onWidthChange]);
@@ -386,6 +389,8 @@ export default React.memo(function AgentChat({ allCells, references, modelConfig
 
   const stopResizing = useCallback(() => {
     isResizing.current = false;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
     document.removeEventListener('mousemove', resize);
     document.removeEventListener('mouseup', stopResizing);
   }, [resize]);

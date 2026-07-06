@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown, Plus, Wand2, Trash2, Edit3, Type, Zap, Code2, ArrowUp, ArrowDown, Copy, GripVertical, ChevronUp, Sparkles } from 'lucide-react';
-import { CellData, CellType, Reference, CellMode } from '../types';
+import { CellData, CellType, Reference, CellMode, CellSandbox } from '../types';
 import { ModelConfig } from '../providers/types';
 import { generateVisualCell, generateMarkup } from '../aiService';
 import mermaid from 'mermaid';
@@ -22,10 +22,13 @@ const CELL_TYPES: { type: CellType; label: string; color: string }[] = [
   { type: 'sandbox', label: 'Sandbox', color: 'var(--orange)' },
 ];
 
-export default React.memo(function CellComponent({ cell, index, allCells, references, modelConfig, isFocused, mode, onUpdate, onRemove, onMoveUp, onMoveDown, onInsertAbove, onInsertBelow, onDuplicate, onChangeType, onRun, onRunAndFocusNext, focusCell, onDragStart, onDragOver, onDrop }: {
+export default React.memo(function CellComponent({ cell, index, allCells, references, modelConfig, isFocused, mode, sandboxes = [], onCreateSandbox, onFocusSandbox, onUpdate, onRemove, onMoveUp, onMoveDown, onInsertAbove, onInsertBelow, onDuplicate, onChangeType, onRun, onRunAndFocusNext, focusCell, onDragStart, onDragOver, onDrop }: {
   cell: CellData; index: number; allCells: CellData[]; references: Reference[];
   modelConfig: ModelConfig;
   isFocused: boolean; mode: CellMode;
+  sandboxes?: CellSandbox[];
+  onCreateSandbox: (name: string, color: string, cellId: string) => void;
+  onFocusSandbox: (sandboxId: string) => void;
   onUpdate: (id: string, d: Partial<CellData>) => void;
   onRemove: (id: string) => void;
   onMoveUp: () => void;
@@ -43,6 +46,9 @@ export default React.memo(function CellComponent({ cell, index, allCells, refere
 }) {
   const [prompt, setPrompt] = useState('');
   const [isMarkingUp, setIsMarkingUp] = useState(false);
+
+  const currentSandbox = sandboxes.find(s => s.id === cell.sandboxId);
+  const borderStyle = currentSandbox ? `4px solid ${currentSandbox.color}` : undefined;
   const contentRef = useRef<HTMLDivElement>(null);
   const cur = cell.versions?.[cell.currentVersionIndex];
 
@@ -152,7 +158,16 @@ export default React.memo(function CellComponent({ cell, index, allCells, refere
 
   if (cell.type === 'code') {
     return (
-      <div className={`flex mb-1 group ${focusClass} rounded`} id={`cell-${cell.id}`} onClick={focusCell} draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}>
+      <div 
+        className={`flex mb-1 group ${focusClass} rounded`} 
+        id={`cell-${cell.id}`} 
+        onClick={focusCell} 
+        draggable 
+        onDragStart={onDragStart} 
+        onDragOver={onDragOver} 
+        onDrop={onDrop}
+        style={{ borderLeft: borderStyle }}
+      >
         <div className="flex-shrink-0 w-12 flex flex-col items-center pt-2 bg-[var(--bg2)] border-y border-l border-[var(--border)] rounded-l select-none">
           <button onClick={() => onUpdate(cell.id, { isCollapsed: !cell.isCollapsed })}
             className="text-[var(--text-dim)] hover:text-[var(--purple)] transition-colors mt-1">
@@ -178,6 +193,11 @@ export default React.memo(function CellComponent({ cell, index, allCells, refere
             executionCount={cell.executionCount}
             executionResult={cell.executionResult}
             isExecuting={cell.isExecuting}
+            sandboxes={sandboxes}
+            sandboxId={cell.sandboxId}
+            onAssignSandbox={(sId) => onUpdate(cell.id, { sandboxId: sId })}
+            onCreateSandbox={(name, color) => onCreateSandbox(name, color, cell.id)}
+            onFocusSandbox={onFocusSandbox}
             onUpdate={(code, lang, detectedLang, detectedConf, langOverride) => 
               onUpdate(cell.id, { 
                 codeContent: code, 
@@ -201,7 +221,16 @@ export default React.memo(function CellComponent({ cell, index, allCells, refere
   }
 
   return (
-    <div className={`flex mb-1 group ${focusClass} rounded`} id={`cell-${cell.id}`} onClick={focusCell} draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}>
+    <div 
+      className={`flex mb-1 group ${focusClass} rounded`} 
+      id={`cell-${cell.id}`} 
+      onClick={focusCell} 
+      draggable 
+      onDragStart={onDragStart} 
+      onDragOver={onDragOver} 
+      onDrop={onDrop}
+      style={{ borderLeft: borderStyle }}
+    >
       {/* Left margin */}
       <div className="flex-shrink-0 w-12 flex flex-col items-center pt-2 bg-[var(--bg2)] border-y border-l border-[var(--border)] rounded-l select-none">
         <button onClick={() => onUpdate(cell.id, { isCollapsed: !cell.isCollapsed })}

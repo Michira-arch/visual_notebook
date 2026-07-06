@@ -36,6 +36,7 @@ export interface CellData {
   // execution results
   isExecuting?: boolean;
   executionResult?: ExecutionResult;
+  sandboxId?: string;
   // sandbox cells (live HTML/CSS/JS)
   sandboxHtml?: string;
   sandboxCss?: string;
@@ -44,6 +45,12 @@ export interface CellData {
   // jupyter-style metadata
   executionCount?: number;
   lastRunTimestamp?: number;
+}
+
+export interface CellSandbox {
+  id: string;
+  name: string;
+  color: string;
 }
 
 export interface ExecutionResult {
@@ -82,6 +89,8 @@ export interface NotebookState {
   references: Reference[];
   conversations?: Conversation[];
   activeConversationId?: string;
+  sandboxes?: CellSandbox[];
+  focusedSandboxId?: string;
   createdAt: number;
   updatedAt: number;
 }

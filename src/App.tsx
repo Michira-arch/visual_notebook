@@ -48,6 +48,7 @@ export default function App() {
   const activeNb = notebooks.find(n => n.id === activeNbId) || notebooks[0];
   const [registry, setRegistry] = useState<Record<string, any>>({});
   const [showVariables, setShowVariables] = useState(false);
+  const [focusedSandboxId, setFocusedSandboxId] = useState<string | null>(null);
 
   useEffect(() => {
     executionClient.detectCompilers().then(compilers => {
@@ -184,6 +185,28 @@ export default function App() {
 
   const updateCell = useCallback((id: string, u: Partial<CellData>) => { setCells(p => p.map(c => c.id === id ? { ...c, ...u } : c)); }, [setCells]);
   const removeCell = useCallback((id: string) => { setCells(p => p.filter(c => c.id !== id)); }, [setCells]);
+
+  const handleCreateSandbox = useCallback((name: string, color: string, cellId?: string) => {
+    const newSandbox = { id: Math.random().toString(36).substr(2, 9), name, color };
+    setNotebooks(prev => {
+      const idx = prev.findIndex(n => n.id === activeNbId);
+      if (idx === -1) return prev;
+      const nb = prev[idx];
+      const currentSandboxes = nb.sandboxes || [];
+      const updatedCells = cellId 
+        ? nb.cells.map(c => c.id === cellId ? { ...c, sandboxId: newSandbox.id } : c)
+        : nb.cells;
+      const nextNb = { 
+        ...nb, 
+        sandboxes: [...currentSandboxes, newSandbox], 
+        cells: updatedCells,
+        updatedAt: Date.now() 
+      };
+      saveNotebook(nextNb);
+      const nextAll = [...prev]; nextAll[idx] = nextNb;
+      return nextAll;
+    });
+  }, [activeNbId]);
 
   // Jupyter-style cell navigation
   const cellNav = useCellNavigation(activeNb.cells, addCell, updateCell, removeCell);
@@ -643,52 +666,83 @@ export default function App() {
                 Click here or press <kbd className="px-1 bg-[var(--bg2)] rounded">b</kbd> to add a cell
               </div>
             )}
-            {activeNb.cells.map((cell, i) => (
-              <React.Fragment key={cell.id}>
-                {/* Gap click insert above */}
-                {i === 0 && (
-                  <div className="h-3 hover:h-6 transition-all cursor-pointer group relative" onClick={() => cellNav.insertAbove()}>
+            {focusedSandboxId && (
+              <div className="w-full bg-[var(--purple)]/10 border border-[var(--purple)]/30 rounded px-4 py-3 mb-6 flex items-center justify-between font-mono text-xs shadow-xl">
+                <div className="flex items-center gap-2 text-white">
+                  <span className="w-2 h-2.5 rounded-full animate-ping opacity-75" style={{ backgroundColor: activeNb.sandboxes?.find(s => s.id === focusedSandboxId)?.color || '#a855f7' }} />
+                  <span className="flex items-center gap-1.5">
+                    Focused Sandbox: 
+                    <span 
+                      className="px-1.5 py-0.5 rounded font-bold uppercase tracking-wider text-[9px] text-white"
+                      style={{ backgroundColor: activeNb.sandboxes?.find(s => s.id === focusedSandboxId)?.color || '#a855f7' }}
+                    >
+                      {activeNb.sandboxes?.find(s => s.id === focusedSandboxId)?.name}
+                    </span>
+                    ({activeNb.cells.filter(c => c.sandboxId === focusedSandboxId).length} cells)
+                  </span>
+                </div>
+                <button 
+                  onClick={() => setFocusedSandboxId(null)}
+                  className="px-2 py-0.5 bg-[var(--bg)] border border-[var(--border)] rounded hover:border-[var(--purple)] hover:text-white transition-colors cursor-pointer text-[10px]"
+                >
+                  Exit Focus
+                </button>
+              </div>
+            )}
+            {activeNb.cells.map((cell, i) => {
+              if (focusedSandboxId && cell.sandboxId !== focusedSandboxId) {
+                return null;
+              }
+              return (
+                <React.Fragment key={cell.id}>
+                  {/* Gap click insert above */}
+                  {i === 0 && (
+                    <div className="h-3 hover:h-6 transition-all cursor-pointer group relative" onClick={() => cellNav.insertAbove()}>
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <div className="w-8 h-px bg-[var(--border)] group-hover:bg-[var(--cyan)] transition-colors"><Plus size={10} className="absolute -top-1 -left-1 text-[var(--text-dim)] group-hover:text-[var(--cyan)]" /></div>
+                      </div>
+                    </div>
+                  )}
+                  <CellComponent
+                    key={cell.id}
+                    cell={cell}
+                    index={i}
+                    allCells={activeNb.cells}
+                    references={activeNb.references}
+                    modelConfig={modelConfig}
+                    isFocused={cellNav.focusedCellId === cell.id}
+                    mode={cellNav.mode}
+                    sandboxes={activeNb.sandboxes || []}
+                    onCreateSandbox={handleCreateSandbox}
+                    onFocusSandbox={setFocusedSandboxId}
+                    onUpdate={updateCell}
+                    onRemove={removeCell}
+                    onMoveUp={() => { const r = cellNav.moveCell(cell.id, i - 1); if (r) setCells(r); }}
+                    onMoveDown={() => { const r = cellNav.moveCell(cell.id, i + 1); if (r) setCells(r); }}
+                    onInsertAbove={() => cellNav.insertAbove()}
+                    onInsertBelow={() => cellNav.insertBelow()}
+                    onDuplicate={() => cellNav.duplicateCell(cell.id)}
+                    onChangeType={(type) => cellNav.changeCellType(cell.id, type)}
+                    onRun={() => runCellByType(cell.id)}
+                    onRunAndFocusNext={runAndFocusNext}
+                    focusCell={() => cellNav.focusCell(cell.id)}
+                    onDragStart={(e) => handleDragStart(e, cell.id)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, cell.id)}
+                  />
+                  {/* Gap click insert below */}
+                  <div className="h-3 hover:h-6 transition-all cursor-pointer group relative" onClick={() => {
+                    const newCellId = addCell('canvas', i + 1);
+                    cellNav.setFocusedCellId(newCellId);
+                    cellNav.setMode('edit');
+                  }}>
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100">
                       <div className="w-8 h-px bg-[var(--border)] group-hover:bg-[var(--cyan)] transition-colors"><Plus size={10} className="absolute -top-1 -left-1 text-[var(--text-dim)] group-hover:text-[var(--cyan)]" /></div>
                     </div>
                   </div>
-                )}
-                <CellComponent
-                  key={cell.id}
-                  cell={cell}
-                  index={i}
-                  allCells={activeNb.cells}
-                  references={activeNb.references}
-                  modelConfig={modelConfig}
-                  isFocused={cellNav.focusedCellId === cell.id}
-                  mode={cellNav.mode}
-                  onUpdate={updateCell}
-                  onRemove={removeCell}
-                  onMoveUp={() => { const r = cellNav.moveCell(cell.id, i - 1); if (r) setCells(r); }}
-                  onMoveDown={() => { const r = cellNav.moveCell(cell.id, i + 1); if (r) setCells(r); }}
-                  onInsertAbove={() => cellNav.insertAbove()}
-                  onInsertBelow={() => cellNav.insertBelow()}
-                  onDuplicate={() => cellNav.duplicateCell(cell.id)}
-                  onChangeType={(type) => cellNav.changeCellType(cell.id, type)}
-                  onRun={() => runCellByType(cell.id)}
-                  onRunAndFocusNext={runAndFocusNext}
-                  focusCell={() => cellNav.focusCell(cell.id)}
-                  onDragStart={(e) => handleDragStart(e, cell.id)}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, cell.id)}
-                />
-                {/* Gap click insert below */}
-                <div className="h-3 hover:h-6 transition-all cursor-pointer group relative" onClick={() => {
-                  const newCellId = addCell('canvas', i + 1);
-                  cellNav.setFocusedCellId(newCellId);
-                  cellNav.setMode('edit');
-                }}>
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                    <div className="w-8 h-px bg-[var(--border)] group-hover:bg-[var(--cyan)] transition-colors"><Plus size={10} className="absolute -top-1 -left-1 text-[var(--text-dim)] group-hover:text-[var(--cyan)]" /></div>
-                  </div>
-                </div>
-              </React.Fragment>
-            ))}
+                </React.Fragment>
+              );
+            })}
             <NewCellButton onAdd={(t) => { const id = addCell(t); cellNav.setFocusedCellId(id); cellNav.setMode('edit'); }} onFloodlight={() => setShowFloodlight(true)} />
           </main>
         </div>

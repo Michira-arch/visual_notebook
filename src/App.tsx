@@ -16,6 +16,7 @@ import ReferenceViewer from './components/ReferenceViewer';
 import TemplateGallery from './components/TemplateGallery';
 import PresentationMode from './components/PresentationMode';
 import AgentChat from './components/AgentChat';
+import VariableExplorer from './components/VariableExplorer';
 import PrismAnalyzer from './components/PrismAnalyzer';
 import Shipper from './components/Shipper';
 import ResearchBank from './components/ResearchBank';
@@ -46,6 +47,7 @@ export default function App() {
   const [activeNbId, setActiveNbId] = useState<string>(() => getActiveNotebookId() || notebooks[0].id);
   const activeNb = notebooks.find(n => n.id === activeNbId) || notebooks[0];
   const [registry, setRegistry] = useState<Record<string, any>>({});
+  const [showVariables, setShowVariables] = useState(false);
 
   useEffect(() => {
     executionClient.detectCompilers().then(compilers => {
@@ -583,6 +585,7 @@ export default function App() {
           <input type="file" multiple ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
           <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors"><Upload size={14} /> Refs</button>
           <button onClick={() => setShowChat(!showChat)} className={`flex items-center gap-1.5 text-xs font-mono transition-colors ${showChat ? 'text-[var(--cyan)]' : 'text-slate-400 hover:text-white'}`} title="Agent Chat"><Bot size={14} /> Agent</button>
+          <button onClick={() => setShowVariables(!showVariables)} className={`flex items-center gap-1.5 text-xs font-mono transition-colors ${showVariables ? 'text-[var(--cyan)]' : 'text-slate-400 hover:text-white'}`} title="Variable Explorer"><List size={14} /> Variables</button>
           <button onClick={() => setShowSettings(true)} className="flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-white transition-colors" title="API Key Settings"><Settings size={14} /></button>
         </div>
       </header>
@@ -594,7 +597,7 @@ export default function App() {
           className="flex-1 flex flex-col transition-all duration-300 overflow-y-auto"
           style={{ 
             marginLeft: sidebarOpen ? '15rem' : '0',
-            marginRight: showChat ? `${chatWidth}px` : '0'
+            marginRight: `${(showChat ? chatWidth : 0) + (showVariables ? 320 : 0)}px`
           }}
         >
           {activeNb.references.length > 0 && (
@@ -760,6 +763,17 @@ export default function App() {
         onFloodlight={(prompt) => {
           executeFloodlight(prompt);
         }}
+      />
+      <VariableExplorer
+        registry={registry}
+        isOpen={showVariables}
+        onClose={() => setShowVariables(false)}
+        onDeleteVar={(key) => setRegistry(prev => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        })}
+        onClearAll={() => setRegistry({})}
       />
       {showCommandPalette && <CommandPalette actions={[
         { id: 'run-all', label: 'Run All Cells', category: 'notebook' as const, action: runAllCells },
